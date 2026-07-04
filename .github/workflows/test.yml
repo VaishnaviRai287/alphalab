@@ -1,0 +1,41 @@
+# =============================================================================
+# AlphaLab — Test Workflow
+# =============================================================================
+# Runs on every push and pull request to main and dev.
+#
+# Steps:
+#   1. pytest — runs the full test suite with coverage reporting
+# =============================================================================
+
+name: test
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    name: Test (pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install package and dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run tests with coverage
+        run: pytest tests/ --cov=src/alphalab --cov-report=term-missing
+
+      - name: Upload coverage report (informational — no minimum enforced in Phase 0)
+        if: always()
+        run: echo "Coverage reported above. Minimum threshold enforced from Phase 2."

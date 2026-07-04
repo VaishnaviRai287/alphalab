@@ -1,0 +1,136 @@
+# =============================================================================
+# AlphaLab — .gitignore
+# =============================================================================
+# Two categories of files are NEVER tracked:
+#   1. internal/  — private engineering notebook (learning notes, diary, etc.)
+#   2. .env       — secrets (DB passwords, API keys, etc.)
+#
+# All other entries follow standard Python + Node.js + macOS conventions.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PRIVATE — never push to GitHub
+# -----------------------------------------------------------------------------
+internal/
+.env
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+wheels/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+
+# Type checker
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Linter
+.ruff_cache/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+*.pytest_cache/
+nosetests.xml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# pyenv / mise
+# .python-version is intentionally COMMITTED (pins the version)
+# Only ignore if you prefer not to commit it:
+# .python-version
+
+# -----------------------------------------------------------------------------
+# Node.js / Next.js (web/)
+# -----------------------------------------------------------------------------
+node_modules/
+.next/
+.nuxt/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# -----------------------------------------------------------------------------
+# Infrastructure
+# -----------------------------------------------------------------------------
+# .env.example is committed — .env is not
+.env.*
+!.env.example
+
+# Docker volumes (if mounted locally)
+postgres-data/
+redis-data/
+
+# -----------------------------------------------------------------------------
+# Editor / IDE
+# -----------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# -----------------------------------------------------------------------------
+# Operating System
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# -----------------------------------------------------------------------------
+# Temporary files
+# -----------------------------------------------------------------------------
+*.tmp
+*.temp
+*.bak
+*.orig
+*.log
+
+# -----------------------------------------------------------------------------
+# Security
+# -----------------------------------------------------------------------------
+*.pem
+*.key
+*.cert
+*.crt
+*.p12
+*.pfx
+secrets/

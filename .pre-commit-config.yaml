@@ -1,0 +1,62 @@
+# =============================================================================
+# AlphaLab — .pre-commit-config.yaml
+# =============================================================================
+# Pre-commit runs these hooks on every `git commit`, before the commit lands.
+# This catches issues at the developer's machine rather than in the CI queue.
+#
+# Install once after cloning:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually against all files:
+#   pre-commit run --all-files
+# =============================================================================
+
+repos:
+  # ---------------------------------------------------------------------------
+  # pre-commit-hooks — general file hygiene
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      # Ensure every file ends with a newline
+      - id: end-of-file-fixer
+        exclude: "^web/"
+
+      # Remove trailing whitespace (except Markdown, where it can mean <br>)
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+
+      # Validate all YAML files are parseable
+      - id: check-yaml
+        args: ["--unsafe"]  # allows custom YAML tags
+
+      # Validate all TOML files are parseable
+      - id: check-toml
+
+      # Prevent accidentally committing files over 500KB
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+      # Detect leftover merge conflict markers (<<<<<<<, =======, >>>>>>>)
+      - id: check-merge-conflict
+
+      # Prevent committing directly to protected branches
+      - id: no-commit-to-branch
+        args: ["--branch=main", "--branch=dev"]
+
+  # ---------------------------------------------------------------------------
+  # Ruff — Python linter and formatter
+  # Replaces: flake8, isort, pyupgrade, and many other tools
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.0
+    hooks:
+      # Linting: catches errors, style issues, unused imports
+      - id: ruff
+        args: ["--fix"]
+        types_or: [python, pyi]
+
+      # Formatting: consistent code style (Black-compatible)
+      - id: ruff-format
+        types_or: [python, pyi]

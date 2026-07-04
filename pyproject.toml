@@ -1,0 +1,163 @@
+# =============================================================================
+# AlphaLab — pyproject.toml
+# =============================================================================
+# Single source of truth for:
+#   - Package metadata and build configuration
+#   - Development dependencies
+#   - Ruff (linter + formatter)
+#   - Mypy (type checker)
+#   - Pytest (test runner + coverage)
+#
+# Build backend: hatchling
+# Package layout: src/
+# Python requirement: >=3.12
+# =============================================================================
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# -----------------------------------------------------------------------------
+# Package metadata
+# -----------------------------------------------------------------------------
+[project]
+name = "alphalab"
+version = "0.1.0"
+description = "A robustness-aware factor research platform for NIFTY 50 equities"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+authors = [{ name = "VaishnaviRai287" }]
+keywords = [
+    "finance",
+    "quantitative",
+    "factor-research",
+    "backtesting",
+    "robustness",
+    "nifty50",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+
+# No runtime dependencies yet — added phase-by-phase as justified in ADRs
+dependencies = []
+
+# -----------------------------------------------------------------------------
+# Optional dependency groups
+# -----------------------------------------------------------------------------
+[project.optional-dependencies]
+dev = [
+    # Testing
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+    # Linting and formatting
+    "ruff>=0.5",
+    # Type checking
+    "mypy>=1.10",
+    # Pre-commit hooks
+    "pre-commit>=3.7",
+]
+
+# -----------------------------------------------------------------------------
+# Build configuration — tells hatchling where the package lives
+# -----------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["src/alphalab"]
+
+# -----------------------------------------------------------------------------
+# Ruff — linter and formatter
+# Target: Python 3.12, 88-char line length (Black-compatible)
+# -----------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# Rule sets:
+#   E/W  — pycodestyle errors and warnings
+#   F    — pyflakes (undefined names, unused imports)
+#   I    — isort (import ordering)
+#   B    — flake8-bugbear (opinionated correctness rules)
+#   UP   — pyupgrade (modern Python idioms)
+#   N    — pep8-naming (naming conventions)
+#   SIM  — flake8-simplify (unnecessary complexity)
+select = ["E", "W", "F", "I", "B", "UP", "N", "SIM"]
+# E501: line too long — ruff-format handles line length, not the linter
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["alphalab"]
+split-on-trailing-comma = true
+
+[tool.ruff.lint.per-file-ignores]
+# Tests can use assert statements and don't need docstrings on every function
+"tests/**/*.py" = ["S101", "D"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+# -----------------------------------------------------------------------------
+# Mypy — static type checker
+# Strict mode: requires explicit types throughout the codebase
+# -----------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+packages = ["alphalab"]
+ignore_missing_imports = true
+# Show error codes for easier lookup
+show_error_codes = true
+# Warn about unused ignores
+warn_unused_ignores = true
+
+# -----------------------------------------------------------------------------
+# Pytest — test runner
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = [
+    "--verbose",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "unit: unit tests (fast, no external dependencies)",
+    "integration: integration tests (may require Docker services)",
+    "slow: tests that take more than 1 second",
+]
+
+# -----------------------------------------------------------------------------
+# Coverage — measures test coverage
+# -----------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/alphalab"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 0  # Phase 0: no minimum; raised to 80 in Phase 2+
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+]

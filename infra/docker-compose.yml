@@ -1,0 +1,143 @@
+# =============================================================================
+# AlphaLab — Docker Compose
+# =============================================================================
+#
+# Services:
+#   postgres  — PostgreSQL 16 (always starts)  — metadata database
+#   redis     — Redis 7 (always starts)         — Celery broker + result backend
+#   pgadmin   — pgAdmin 4 (optional)            — database GUI
+#
+# Usage:
+#   # Start core services (postgres + redis)
+#   docker compose up -d
+#
+#   # Start everything including pgAdmin GUI
+#   docker compose --profile tools up -d
+#
+#   # Stop all services
+#   docker compose down
+#
+#   # Stop and remove volumes (destroys all data)
+#   docker compose down -v
+#
+# Environment:
+#   Copy infra/.env.example to .env and fill in values.
+#   The .env file is gitignored and must never be committed.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Metadata Database
+  # ---------------------------------------------------------------------------
+  # Stores: users, experiments, factors, backtest results, robustness results,
+  #         job status, experiment metadata.
+  #
+  # Why PostgreSQL?
+  #   Relational metadata with complex joins, foreign keys, and transactions.
+  #   PostgreSQL is the industry standard for this workload. See ADR-003.
+  #
+  # Version: 16-alpine (smallest stable image)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: alphalab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - alphalab-network
+
+  # ---------------------------------------------------------------------------
+  # Redis — Task Broker and Result Backend
+  # ---------------------------------------------------------------------------
+  # Used by Celery (Phase 4) as:
+  #   - Message broker: FastAPI enqueues tasks → Redis → Celery worker
+  #   - Result backend: Celery workers store job results in Redis
+  #
+  # Why Redis?
+  #   Celery's recommended broker. In-memory, fast, simple to operate.
+  #   A single Redis instance is sufficient for this scale. See ADR-003.
+  #
+  # Version: 7-alpine (smallest stable image)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: alphalab-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - alphalab-network
+
+  # ---------------------------------------------------------------------------
+  # pgAdmin — PostgreSQL GUI (optional development tool)
+  # ---------------------------------------------------------------------------
+  # Start with: docker compose --profile tools up -d
+  #
+  # Why optional?
+  #   pgAdmin is a development convenience. It is not required to run
+  #   AlphaLab. Gating it behind a Docker Compose profile keeps the
+  #   default `docker compose up` lightweight and production-like.
+  #
+  # Access: http://localhost:5050
+  # Login: PGADMIN_EMAIL / PGADMIN_PASSWORD (from .env)
+  # ---------------------------------------------------------------------------
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: alphalab-pgadmin
+    restart: unless-stopped
+    profiles:
+      - tools
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - alphalab-network
+
+# =============================================================================
+# Named volumes — persist data across container restarts
+# =============================================================================
+volumes:
+  postgres_data:
+    name: alphalab-postgres-data
+  redis_data:
+    name: alphalab-redis-data
+  pgadmin_data:
+    name: alphalab-pgadmin-data
+
+# =============================================================================
+# Network — isolated bridge network for all AlphaLab services
+# =============================================================================
+networks:
+  alphalab-network:
+    name: alphalab-network
+    driver: bridge

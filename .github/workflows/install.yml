@@ -1,0 +1,55 @@
+# =============================================================================
+# AlphaLab — Install Workflow
+# =============================================================================
+# Verifies that the package installs cleanly in a fresh environment.
+#
+# This catches pyproject.toml errors that lint and tests do not:
+#   - Missing packages in the packages list
+#   - Wrong src/ path configuration
+#   - Broken build backend configuration
+#
+# Runs on every push and pull request to main and dev.
+# =============================================================================
+
+name: install
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  install:
+    name: Install (clean environment)
+    runs-on: ubuntu-latest
+
+    # No pip cache — must be a genuinely clean install to catch missing deps
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12 (no cache — clean environment required)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package in editable mode with dev dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Verify root package is importable post-install
+        run: python -c "import alphalab; print(f'alphalab {alphalab.__version__} installed successfully')"
+
+      - name: Verify all sub-packages are importable post-install
+        run: |
+          python -c "
+          packages = [
+            'alphalab.api', 'alphalab.data', 'alphalab.dsl',
+            'alphalab.engine', 'alphalab.worker', 'alphalab.common',
+            'alphalab.config', 'alphalab.utils',
+          ]
+          for pkg in packages:
+            __import__(pkg)
+            print(f'  ✓ {pkg}')
+          print('All sub-packages import successfully.')
+          "
