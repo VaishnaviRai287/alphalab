@@ -31,10 +31,10 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_importable(module_name: str) -> bool:
     """Return True if the named module can be imported without error."""
@@ -50,12 +50,12 @@ def _is_importable(module_name: str) -> bool:
 # Verify every package can be imported after `pip install -e .`
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 def test_root_package_importable() -> None:
     """The root alphalab package must be importable."""
     assert _is_importable("alphalab"), (
-        "Could not import 'alphalab'. "
-        "Ensure you have run: pip install -e '.[dev]'"
+        "Could not import 'alphalab'. Ensure you have run: pip install -e '.[dev]'"
     )
 
 
@@ -154,6 +154,7 @@ def test_package_structure_complete() -> None:
 # src/ layout validation
 # Verify the package resolves from src/, not from the project root
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 def test_src_layout_respected() -> None:

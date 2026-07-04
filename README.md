@@ -1,5 +1,9 @@
 # AlphaLab
 
+[![Lint](https://github.com/VaishnaviRai287/alphalab/actions/workflows/lint.yml/badge.svg)](https://github.com/VaishnaviRai287/alphalab/actions/workflows/lint.yml)
+[![Test](https://github.com/VaishnaviRai287/alphalab/actions/workflows/test.yml/badge.svg)](https://github.com/VaishnaviRai287/alphalab/actions/workflows/test.yml)
+[![Install](https://github.com/VaishnaviRai287/alphalab/actions/workflows/install.yml/badge.svg)](https://github.com/VaishnaviRai287/alphalab/actions/workflows/install.yml)
+
 **A robustness-aware factor research platform for NIFTY 50 equities.**
 
 AlphaLab answers one question:
