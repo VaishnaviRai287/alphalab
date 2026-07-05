@@ -39,7 +39,7 @@ class PortfolioConstructor:
                 weights = z_scores / gross_exposure if gross_exposure > 0 else pd.Series(0.0, index=signal.index)
 
             return pd.DataFrame({
-                "date": group["date"],
+                "date": group.name,
                 "ticker": group["ticker"],
                 "weight": weights
             })

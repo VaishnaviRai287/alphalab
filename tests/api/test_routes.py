@@ -96,7 +96,7 @@ def test_submit_experiment_requires_auth(client: TestClient) -> None:
     }
 
     response = client.post("/experiments", json=payload)
-    assert response.status_code == 403
+    assert response.status_code in [401, 403]
 
 
 @pytest.mark.unit

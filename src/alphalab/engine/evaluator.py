@@ -62,7 +62,7 @@ class FactorEvaluator:
             signal = factor_func(group)
             return pd.DataFrame({
                 "date": group["date"],
-                "ticker": group["ticker"],
+                "ticker": group.name,
                 "signal": signal.values
             })
 
