@@ -21,7 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db_session),
-) -> dict:
+) -> dict[str, str]:
     """OAuth2 compatible token login, returning a JWT access token.
 
     Args:

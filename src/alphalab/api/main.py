@@ -33,7 +33,7 @@ app.include_router(experiments_router)
 
 
 @app.get("/")
-async def root() -> dict:
+async def root() -> dict[str, str]:
     """Verify that the API is online and return basic service info."""
     return {
         "status": "online",

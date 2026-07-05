@@ -6,6 +6,7 @@ FastAPI routing endpoints for managing Research Experiments and Factors.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -51,7 +52,7 @@ class RobustnessResultOut(BaseModel):
     noise_score: float | None = None
     missing_data_score: float | None = None
     overall_score: float | None = None
-    failure_reasons: dict | None = None
+    failure_reasons: dict[str, Any] | None = None
 
     model_config = {"from_attributes": True}
 

@@ -6,6 +6,7 @@ Defines JSON Web Token creation, authentication parsing, and user resolvers.
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -23,7 +24,9 @@ logger = logging.getLogger("alphalab.api.auth.jwt")
 security_scheme = HTTPBearer()
 
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    data: dict[str, Any], expires_delta: timedelta | None = None
+) -> str:
     """Generate a signed JWT access token.
 
     Args:
@@ -51,7 +54,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> dict | None:
+def decode_access_token(token: str) -> dict[str, Any] | None:
     """Decode and validate a JWT access token.
 
     Args:

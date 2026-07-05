@@ -11,6 +11,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from alphalab.api.database.connection import async_session_maker
 from alphalab.api.models.experiment import Experiment
 from alphalab.api.models.factor import Factor
@@ -21,7 +22,7 @@ logger = logging.getLogger("alphalab.worker.tasks")
 
 
 async def _check_and_update_experiment_status_async(
-    session, experiment_id: uuid.UUID
+    session: AsyncSession, experiment_id: uuid.UUID
 ) -> None:
     """Helper query checking if all factors in the experiment have completed analysis."""
     # Fetch all factors and load their results
@@ -152,13 +153,13 @@ async def _run_robustness_async(factor_id: str) -> None:
             await session.rollback()
 
 
-@celery_app.task
+@celery_app.task  # type: ignore[misc]
 def run_backtest_task(factor_id: str) -> None:
     """Synchronous Celery task wrapper launching the asynchronous backtest worker."""
     asyncio.run(_run_backtest_async(factor_id))
 
 
-@celery_app.task
+@celery_app.task  # type: ignore[misc]
 def run_robustness_task(factor_id: str) -> None:
     """Synchronous Celery task wrapper launching the asynchronous robustness worker."""
     asyncio.run(_run_robustness_async(factor_id))
