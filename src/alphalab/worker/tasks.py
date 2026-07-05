@@ -153,13 +153,13 @@ async def _run_robustness_async(factor_id: str) -> None:
             await session.rollback()
 
 
-@celery_app.task  # type: ignore[misc]
+@celery_app.task  # type: ignore[untyped-decorator]
 def run_backtest_task(factor_id: str) -> None:
     """Synchronous Celery task wrapper launching the asynchronous backtest worker."""
     asyncio.run(_run_backtest_async(factor_id))
 
 
-@celery_app.task  # type: ignore[misc]
+@celery_app.task  # type: ignore[untyped-decorator]
 def run_robustness_task(factor_id: str) -> None:
     """Synchronous Celery task wrapper launching the asynchronous robustness worker."""
     asyncio.run(_run_robustness_async(factor_id))
