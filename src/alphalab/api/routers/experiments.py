@@ -24,7 +24,7 @@ from alphalab.worker.tasks import run_backtest_task, run_robustness_task
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
 
 
-def _get_experiment_options() -> tuple:
+def _get_experiment_options() -> tuple[Any, ...]:
     """Return common SQLAlchemy eager loading options for Experiments."""
     return (
         selectinload(Experiment.factors).selectinload(Factor.backtest_result),
