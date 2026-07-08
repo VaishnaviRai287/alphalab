@@ -136,11 +136,7 @@ def test_backtest_task_integration_success(
 @patch("alphalab.worker.tasks.async_session_maker")
 @patch("alphalab.engine.runner.DuckDBStorage")
 @patch("alphalab.engine.runner.NIFTY50Universe")
-@patch("alphalab.engine.robustness.DuckDBStorage")
-@patch("alphalab.engine.robustness.NIFTY50Universe")
 def test_robustness_task_integration_success(
-    mock_rob_universe_class: MagicMock,
-    mock_rob_storage_class: MagicMock,
     mock_run_universe_class: MagicMock,
     mock_run_storage_class: MagicMock,
     mock_session_maker: MagicMock,
@@ -148,7 +144,6 @@ def test_robustness_task_integration_success(
 ) -> None:
     """Verify that run_robustness_task executes real perturbations and saves scores."""
     # Mock storage/universe for both backtest runner and robustness evaluator
-    mock_rob_storage_class.return_value = temp_duckdb
     mock_run_storage_class.return_value = temp_duckdb
 
     mock_universe = MagicMock()
@@ -156,7 +151,6 @@ def test_robustness_task_integration_success(
         UniverseEntry("RELIANCE.NS", "NIFTY50", date(2020, 1, 1), None),
         UniverseEntry("TCS.NS", "NIFTY50", date(2020, 1, 1), None),
     ]
-    mock_rob_universe_class.return_value = mock_universe
     mock_run_universe_class.return_value = mock_universe
 
     # Mock PostgreSQL session

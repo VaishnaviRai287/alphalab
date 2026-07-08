@@ -15,7 +15,6 @@ from alphalab.common.exceptions import DataError
 from alphalab.common.types import MarketDataset, UniverseEntry
 from alphalab.data.storage.base import Storage
 from alphalab.data.storage.duckdb import DuckDBStorage
-
 from alphalab.dsl import compile_factor
 from alphalab.engine.evaluator import FactorEvaluator
 from alphalab.engine.metrics import PerformanceCalculator

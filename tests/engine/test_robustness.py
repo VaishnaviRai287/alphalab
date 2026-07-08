@@ -96,26 +96,9 @@ def test_perturbed_storage(sample_price_df):
     assert (result.data["close"] == sample_price_df["close"] * 2).all()
 
 
-@patch("alphalab.engine.robustness.NIFTY50Universe")
-def test_robustness_evaluator_basic(mock_universe_class, sample_price_df):
+def test_robustness_evaluator_basic(sample_price_df):
     """Test RobustnessEvaluator calculates scores and generates failure reasons."""
-    # Mock universe constituents
-    mock_universe = MagicMock()
-    mock_universe_class.return_value = mock_universe
-    mock_universe.get_constituents.return_value = [
-        UniverseEntry(
-            ticker="AAPL",
-            index_name="NIFTY50",
-            effective_from=date(2023, 1, 1),
-            effective_to=None,
-        ),
-        UniverseEntry(
-            ticker="MSFT",
-            index_name="NIFTY50",
-            effective_from=date(2023, 1, 1),
-            effective_to=None,
-        ),
-    ]
+    tickers = ["AAPL", "MSFT"]
 
     base_storage = MagicMock()
     base_storage.get_available_date_range.return_value = (
@@ -134,7 +117,7 @@ def test_robustness_evaluator_basic(mock_universe_class, sample_price_df):
     # Simple factor formula string
     formula = "Momentum(2)"
 
-    results = evaluator.run_robustness(formula, baseline_sharpe=1.5)
+    results = evaluator.run_robustness(formula, tickers, baseline_sharpe=1.5)
 
     assert "noise_score" in results
     assert "missing_data_score" in results
@@ -148,21 +131,11 @@ def test_robustness_evaluator_basic(mock_universe_class, sample_price_df):
     assert "missing_data_ratio" in reasons
 
 
-@patch("alphalab.engine.robustness.NIFTY50Universe")
 def test_robustness_evaluator_unprofitable_baseline(
-    mock_universe_class, sample_price_df
+    sample_price_df
 ):
     """Test RobustnessEvaluator handles non-profitable baseline Sharpe ratio gracefully."""
-    mock_universe = MagicMock()
-    mock_universe_class.return_value = mock_universe
-    mock_universe.get_constituents.return_value = [
-        UniverseEntry(
-            ticker="AAPL",
-            index_name="NIFTY50",
-            effective_from=date(2023, 1, 1),
-            effective_to=None,
-        ),
-    ]
+    tickers = ["AAPL"]
 
     base_storage = MagicMock()
     base_storage.get_available_date_range.return_value = (
@@ -176,7 +149,7 @@ def test_robustness_evaluator_unprofitable_baseline(
     )
 
     evaluator = RobustnessEvaluator(base_storage, num_iterations=1)
-    results = evaluator.run_robustness("Momentum(2)", baseline_sharpe=-0.5)
+    results = evaluator.run_robustness("Momentum(2)", tickers, baseline_sharpe=-0.5)
 
     assert results["noise_score"] == 0.0
     assert results["missing_data_score"] == 0.0
