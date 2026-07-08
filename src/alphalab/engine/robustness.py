@@ -7,6 +7,7 @@ Defines the robustness stress testing engine for evaluating factor stability.
 import logging
 from collections.abc import Callable
 from datetime import date
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -138,7 +139,7 @@ def perturb_missing_data(
         num_chunks = max(1, num_to_drop // chunk_size)
         actual_chunk_size = max(1, num_to_drop // num_chunks)
 
-        indices_to_drop = set()
+        indices_to_drop: set[int] = set()
         for _ in range(num_chunks * 3):
             if len(indices_to_drop) >= num_to_drop:
                 break
@@ -183,7 +184,7 @@ class RobustnessEvaluator:
         start_date: date | None = None,
         end_date: date | None = None,
         baseline_sharpe: float | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Run Gaussian noise and missing data stress tests on the given factor formula.
 
@@ -230,7 +231,7 @@ class RobustnessEvaluator:
                     tickers,
                     start_date,
                     end_date,
-                    lambda df, lvl=level: perturb_gaussian(df, lvl),
+                    lambda df, lvl=level: perturb_gaussian(df, lvl),  # type: ignore[misc]
                 )
                 level_sharpes.append(sharpe)
             avg_level_sharpe = sum(level_sharpes) / len(level_sharpes)
@@ -257,7 +258,7 @@ class RobustnessEvaluator:
                     tickers,
                     start_date,
                     end_date,
-                    lambda df, lvl=level: perturb_missing_data(df, lvl),
+                    lambda df, lvl=level: perturb_missing_data(df, lvl),  # type: ignore[misc]
                 )
                 level_sharpes.append(sharpe)
             avg_level_sharpe = sum(level_sharpes) / len(level_sharpes)
@@ -333,7 +334,7 @@ class RobustnessEvaluator:
         missing_data_score: float,
         overall_score: float,
         baseline_sharpe: float,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Generate structured failure analysis heuristics."""
         threshold = 0.70
         is_noise_sensitive = noise_score < threshold
