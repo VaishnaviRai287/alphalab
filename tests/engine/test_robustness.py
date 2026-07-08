@@ -1,12 +1,12 @@
 """Tests for the Robustness Engine."""
 
 from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
 
-from alphalab.common.types import MarketDataset, UniverseEntry
+from alphalab.common.types import MarketDataset
 from alphalab.engine.robustness import (
     PerturbedStorage,
     RobustnessEvaluator,
