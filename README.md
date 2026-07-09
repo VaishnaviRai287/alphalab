@@ -149,44 +149,6 @@ AlphaLab/
 
 ---
 
-## Phase Roadmap
-
-| Phase | Objective | Status |
-|---|---|---|
-| 0 | Engineering Foundation | ✅ Complete |
-| 1 | Data Foundation | 🔲 Next |
-| 2 | Factor DSL | 🔲 |
-| 3 | Backtesting Engine | 🔲 |
-| 4 | Background Execution | 🔲 |
-| 5 | Robustness Engine | 🔲 |
-| 6 | Backend API | 🔲 |
-| 7 | Research Reports | 🔲 |
-| 8 | Frontend | 🔲 |
-| 9 | Testing | 🔲 |
-| 10 | Deployment | 🔲 |
-| 11 | Polish & Interview Readiness | 🔲 |
-
----
-
-## Documentation
-
-| Document | Purpose |
-|---|---|
-| [`docs/00_MASTER_PLAN.md`](docs/00_MASTER_PLAN.md) | Project constitution — thesis, goals, roadmap |
-| [`docs/01_ARCHITECTURE.md`](docs/01_ARCHITECTURE.md) | System architecture — components, data flow, schema |
-| [`docs/02_CURRENT_STATE.md`](docs/02_CURRENT_STATE.md) | Current phase status |
-| [`docs/03_NEXT_STAGE.md`](docs/03_NEXT_STAGE.md) | Immediate next milestone |
-| [`docs/adr/`](docs/adr/) | Architectural Decision Records |
-
----
-
-## Contributing
-
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the git workflow, commit convention,
-PR process, and documentation policy.
-
----
-
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
