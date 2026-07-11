@@ -1,9 +1,9 @@
 import logging
 import os
 import re
+from typing import Any
 
 import httpx
-from typing import Any
 
 logger = logging.getLogger("alphalab.worker.verdicts")
 
