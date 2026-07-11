@@ -64,7 +64,7 @@ class NIFTY50Universe(Universe):
             if pd.isna(x) or not str(x).strip() or str(x).strip() in ("nan", "None"):
                 return None
             return datetime.datetime.strptime(str(x).strip()[:10], "%Y-%m-%d").date()
-            
+
         df["effective_from"] = df["effective_from"].apply(parse_date)
 
         # Safely parse effective_to, mapping NaNs/empty strings to None

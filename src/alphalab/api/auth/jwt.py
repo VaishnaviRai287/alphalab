@@ -5,6 +5,7 @@ Defines JSON Web Token creation, authentication parsing, and user resolvers.
 """
 
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -79,14 +80,14 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
+    credentials: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),  # noqa: B008
     db: AsyncSession = Depends(get_db_session),
 ) -> User:
     """Dependency resolver parsing token authorization headers to load the active User."""
-    
+
     if settings.MOCK_MODE:
         return User(id=uuid.uuid4(), email="bypass@alphalab.com", name="Bypass User", hashed_password="dummy")
-        
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
