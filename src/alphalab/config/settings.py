@@ -41,9 +41,11 @@ class Settings(BaseSettings):
         elif url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
             
-        # asyncpg does not accept 'sslmode=', it expects 'ssl='
-        if "sslmode=" in url:
-            url = url.replace("sslmode=", "ssl=")
+        # Strip all query parameters that confuse asyncpg (like channel_binding, options, sslmode)
+        # and strictly append ?ssl=require if it's a remote connection
+        if "?" in url:
+            base_url = url.split("?")[0]
+            url = f"{base_url}?ssl=require"
             
         return url
 
