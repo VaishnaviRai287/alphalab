@@ -110,6 +110,16 @@ export async function fetchWithAuth(endpoint: string, options: RequestInit = {})
   return res;
 }
 
+export async function getCurrentUser() {
+  try {
+    const res = await fetchWithAuth("/users/me");
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    return null;
+  }
+}
+
 export async function submitExperiment(formData: FormData) {
   const token = await getAuthToken();
   if (!token) return { error: "Not authenticated" };
