@@ -52,6 +52,15 @@ class Settings(BaseSettings):
     # Redis Task Broker URL
     REDIS_URL: str = "redis://:redis_local_password_change_me@localhost:6379/0"
 
+    @property
+    def async_redis_url(self) -> str:
+        """Automatically adds ssl_cert_reqs for celery if using rediss://"""
+        url = self.REDIS_URL
+        if url.startswith("rediss://") and "ssl_cert_reqs=" not in url:
+            separator = "&" if "?" in url else "?"
+            url = f"{url}{separator}ssl_cert_reqs=CERT_NONE"
+        return url
+
     # JWT Authentication Settings
     JWT_SECRET: str = "change_me_in_production_extremely_long_secret_key_here"
     JWT_ALGORITHM: str = "HS256"
