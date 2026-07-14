@@ -257,7 +257,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
                     <button style={{
                       background: "transparent",
                       color: "var(--ink)",
-                      border: "1px solid var(--border-soft)",
+                      border: "1px solid var(--ink)",
                       padding: "12px 24px",
                       fontSize: "12px",
                       fontWeight: 600,
