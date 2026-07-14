@@ -210,7 +210,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
             display: "block",
             fontWeight: 600,
           }}>
-            INSTITUTIONAL QUANTITATIVE RESEARCH PLATFORM
+            QUANTITATIVE FACTOR RESEARCH PLATFORM
           </span>
           <h1 style={{
             fontFamily: "var(--font-serif)",
@@ -249,6 +249,29 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               </button>
             </Link>
             
+            {(() => {
+              const demoFactor = factors.find(f => f.name === "Risk-Adjusted Momentum");
+              if (demoFactor) {
+                return (
+                  <Link href={`/history/${demoFactor.id}`} style={{ textDecoration: "none" }}>
+                    <button style={{
+                      background: "transparent",
+                      color: "var(--ink)",
+                      border: "1px solid var(--border-soft)",
+                      padding: "12px 24px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      fontFamily: "var(--font-sans)",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}>
+                      View Live Demo
+                    </button>
+                  </Link>
+                );
+              }
+              return null;
+            })()}
           </div>
         </div>
 
