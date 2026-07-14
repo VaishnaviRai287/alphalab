@@ -1,25 +1,23 @@
 import asyncio
-import uuid
 import os
 import sys
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 
 # Add project root to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from alphalab.api.database.connection import async_session_maker
-from alphalab.api.models.user import User
 from alphalab.api.models.experiment import Experiment
 from alphalab.api.models.factor import Factor
-from alphalab.engine.runner import ExperimentRunner
+from alphalab.api.models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-from alphalab.worker.tasks import _run_backtest_async, _run_robustness_async
+from alphalab.worker.tasks import _run_backtest_async, _run_robustness_async  # noqa: E402
 
-async def seed_demo():
+
+async def seed_demo() -> None:
     print("Connecting to database to seed demo...")
     async with async_session_maker() as session:
         # Create Demo User
@@ -68,7 +66,7 @@ async def seed_demo():
     # Run Backtest and Robustness Grid synchronously
     print("Executing Backtest...")
     await _run_backtest_async(str(factor.id))
-    
+
     print("Executing Robustness Grid...")
     await _run_robustness_async(str(factor.id))
 
