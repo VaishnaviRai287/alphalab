@@ -265,7 +265,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
                       cursor: "pointer",
                       transition: "all 0.15s",
                     }}>
-                      View Live Demo
+                      Demo
                     </button>
                   </Link>
                 );
