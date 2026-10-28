@@ -66,3 +66,35 @@ def test_universe_entry_fields() -> None:
     assert isinstance(first_entry, UniverseEntry)
     assert first_entry.index_name == "NIFTY50"
     assert first_entry.effective_from <= date(2020, 1, 1)
+
+
+@pytest.mark.unit
+def test_rebalance_day_is_half_open(tmp_path) -> None:
+    """On a swap date the incoming stock is a member and the outgoing one is not."""
+    csv = tmp_path / "u.csv"
+    csv.write_text(
+        "ticker,index_name,effective_from,effective_to\n"
+        "OLD.NS,NIFTY50,2020-01-01,2022-09-30\n"
+        "NEW.NS,NIFTY50,2022-09-30,\n"
+    )
+    universe = NIFTY50Universe(csv_path=str(csv))
+    tickers = {e.ticker for e in universe.get_constituents(date(2022, 9, 30))}
+    assert tickers == {"NEW.NS"}
+
+
+@pytest.mark.unit
+def test_get_constituents_between_includes_departed(tmp_path) -> None:
+    """Stocks that left the index during the window are included (no survivorship)."""
+    csv = tmp_path / "u.csv"
+    csv.write_text(
+        "ticker,index_name,effective_from,effective_to\n"
+        "GONE.NS,NIFTY50,2018-01-01,2021-03-31\n"
+        "STAY.NS,NIFTY50,2018-01-01,\n"
+        "LATE.NS,NIFTY50,2026-01-01,\n"
+        "EARLY.NS,NIFTY50,2015-01-01,2019-12-31\n"
+    )
+    universe = NIFTY50Universe(csv_path=str(csv))
+    tickers = {
+        e.ticker for e in universe.get_constituents_between(date(2020, 1, 1), date(2025, 12, 31))
+    }
+    assert tickers == {"GONE.NS", "STAY.NS"}

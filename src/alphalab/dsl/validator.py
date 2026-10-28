@@ -6,7 +6,51 @@ Statically analyzes the AST for look-ahead bias and validity.
 
 from alphalab.common.exceptions import DataLeakageError, DSLCompilationError
 from alphalab.dsl.ast import ASTNode, BinaryOp, FunctionCall, NumberLiteral, Variable
-from alphalab.dsl.registry import get_expected_arity, is_supported_function
+from alphalab.dsl.registry import (
+    SUPPORTED_VARIABLES,
+    get_expected_arity,
+    is_supported_function,
+)
+
+# Argument index holding the window/shift size, per function (lower-cased)
+_WINDOW_ARG_INDEX: dict[str, int] = {
+    "momentum": 0,
+    "volatility": 0,
+    "rollingmean": 0,
+    "rollingstd": 0,
+    "lag": 1,
+    "delay": 1,
+    "delta": 1,
+    "ts_max": 1,
+    "ts_min": 1,
+    "ts_rank": 1,
+    "correlation": 2,
+}
+
+# Functions where a shift of 0 is allowed (identity); all others need > 0
+_ZERO_ALLOWED = {"lag", "delay"}
+
+
+def fold_constant(node: ASTNode) -> float | None:
+    """Evaluate a constant sub-expression, or return None if it depends on data."""
+    if isinstance(node, NumberLiteral):
+        return node.value
+    if isinstance(node, BinaryOp):
+        left = fold_constant(node.left)
+        right = fold_constant(node.right)
+        if left is None or right is None:
+            return None
+        if node.operator == "+":
+            return left + right
+        if node.operator == "-":
+            return left - right
+        if node.operator == "*":
+            return left * right
+        if node.operator == "/":
+            if right == 0:
+                raise DSLCompilationError("Division by zero in constant expression")
+            return left / right
+    return None
 
 
 class StaticValidator:
@@ -27,7 +71,13 @@ class StaticValidator:
             self._validate_function(node)
             for arg in node.arguments:
                 self._visit(arg)
-        elif isinstance(node, NumberLiteral | Variable):
+        elif isinstance(node, Variable):
+            if node.name not in SUPPORTED_VARIABLES:
+                raise DSLCompilationError(
+                    f"Unknown variable: {node.name}. "
+                    f"Supported: {', '.join(sorted(SUPPORTED_VARIABLES))}"
+                )
+        elif isinstance(node, NumberLiteral):
             pass
         else:
             raise DSLCompilationError(f"Unknown AST node type: {type(node).__name__}")
@@ -43,69 +93,35 @@ class StaticValidator:
                 f"got {len(node.arguments)}"
             )
 
-        # Specific validations for look-ahead bias and correct literal usage
         name_lower = node.name.lower()
 
-        if name_lower in ("lag", "delay") and len(node.arguments) >= 2:
-            arg = node.arguments[1]
-            if isinstance(arg, NumberLiteral):
-                val = arg.value
-                if val < 0:
-                    raise DataLeakageError(
-                        f"Temporal look-ahead bias detected in {node.name}: negative shift ({val})"
-                    )
-                if not val.is_integer():
-                    raise DSLCompilationError(
-                        f"Shift size for {node.name} must be an integer, got {val}"
-                    )
-        elif name_lower == "delta" and len(node.arguments) >= 2:
-            arg = node.arguments[1]
-            if isinstance(arg, NumberLiteral):
-                val = arg.value
-                if val <= 0:
-                    raise DataLeakageError(
-                        f"Invalid window/shift size for {node.name}: {val} (must be > 0)"
-                    )
-                if not val.is_integer():
-                    raise DSLCompilationError(
-                        f"Window/shift size for {node.name} must be an integer, got {val}"
-                    )
-        elif name_lower in ("ts_max", "ts_min", "ts_rank") and len(node.arguments) >= 2:
-            arg = node.arguments[1]
-            if isinstance(arg, NumberLiteral):
-                val = arg.value
-                if val <= 0:
-                    raise DataLeakageError(
-                        f"Invalid window size for {node.name}: {val} (must be > 0)"
-                    )
-                if not val.is_integer():
-                    raise DSLCompilationError(
-                        f"Window size for {node.name} must be an integer, got {val}"
-                    )
-        elif name_lower == "correlation" and len(node.arguments) >= 3:
-            arg = node.arguments[2]
-            if isinstance(arg, NumberLiteral):
-                val = arg.value
-                if val <= 0:
-                    raise DataLeakageError(
-                        f"Invalid window size for {node.name}: {val} (must be > 0)"
-                    )
-                if not val.is_integer():
-                    raise DSLCompilationError(
-                        f"Window size for {node.name} must be an integer, got {val}"
-                    )
-        elif (
-            name_lower in ("momentum", "volatility", "rollingmean", "rollingstd")
-            and len(node.arguments) >= 1
-        ):
-            arg = node.arguments[0]
-            if isinstance(arg, NumberLiteral):
-                val = arg.value
-                if val <= 0:
-                    raise DataLeakageError(
-                        f"Invalid window size for {node.name}: {val} (must be > 0)"
-                    )
-                if not val.is_integer():
-                    raise DSLCompilationError(
-                        f"Window size for {node.name} must be an integer, got {val}"
-                    )
+        if name_lower == "scale" and fold_constant(node.arguments[1]) is None:
+            raise DSLCompilationError(
+                f"Target for {node.name} must be a constant number"
+            )
+
+        # Window/shift sizes must be statically known so look-ahead can be ruled
+        # out before execution. Constant expressions such as (0 - 1) are folded
+        # first, so they cannot be used to smuggle in a negative shift.
+        idx = _WINDOW_ARG_INDEX.get(name_lower)
+        if idx is None:
+            return
+
+        val = fold_constant(node.arguments[idx])
+        if val is None:
+            raise DSLCompilationError(
+                f"Window/shift size for {node.name} must be a constant integer"
+            )
+        if name_lower in _ZERO_ALLOWED:
+            if val < 0:
+                raise DataLeakageError(
+                    f"Temporal look-ahead bias detected in {node.name}: negative shift ({val})"
+                )
+        elif val <= 0:
+            raise DataLeakageError(
+                f"Invalid window size for {node.name}: {val} (must be > 0)"
+            )
+        if not float(val).is_integer():
+            raise DSLCompilationError(
+                f"Window/shift size for {node.name} must be an integer, got {val}"
+            )

@@ -2,21 +2,32 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { ApiErrorBody } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-function parseError(errorData: any, defaultMsg: string): string {
+function parseError(errorData: ApiErrorBody | null, defaultMsg: string): string {
   if (!errorData) return defaultMsg;
   if (typeof errorData.detail === "string") return errorData.detail;
   if (Array.isArray(errorData.detail)) {
     return errorData.detail
-      .map((err: any) => {
+      .map((err) => {
         const field = err.loc ? err.loc[err.loc.length - 1] : "";
         return field ? `${field}: ${err.msg}` : err.msg;
       })
       .join(", ");
   }
   return defaultMsg;
+}
+
+// Seconds until the JWT's exp claim (falls back to 45 min if it can't be read)
+function tokenLifetimeSeconds(token: string): number {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    return Math.max(0, payload.exp - Math.floor(Date.now() / 1000));
+  } catch {
+    return 45 * 60;
+  }
 }
 
 export async function login(formData: FormData) {
@@ -39,14 +50,14 @@ export async function login(formData: FormData) {
 
   const data = await res.json();
 
-  // Set the HTTP-only cookie
+  // Set the HTTP-only cookie, expiring together with the JWT itself
   const cookieStore = await cookies();
   cookieStore.set("access_token", data.access_token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 3600 * 24 * 7, // 1 week
+    maxAge: tokenLifetimeSeconds(data.access_token),
   });
 
   redirect("/");
@@ -115,7 +126,7 @@ export async function getCurrentUser() {
     const res = await fetchWithAuth("/users/me");
     if (!res.ok) return null;
     return await res.json();
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -151,7 +162,7 @@ export async function submitExperiment(formData: FormData) {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
-    return { error: errorData?.detail || "Failed to submit experiment" };
+    return { error: parseError(errorData, "Failed to submit experiment") };
   }
 
   const data = await res.json();

@@ -192,6 +192,7 @@ class RobustnessEvaluator:
         start_date: date | None = None,
         end_date: date | None = None,
         baseline_sharpe: float | None = None,
+        membership: list[UniverseEntry] | None = None,
     ) -> dict[str, Any]:
         """
         Run Gaussian noise and missing data stress tests on the given factor formula.
@@ -202,6 +203,7 @@ class RobustnessEvaluator:
             start_date: Start date of the backtest. Defaults to storage minimum.
             end_date: End date of the backtest. Defaults to storage maximum.
             baseline_sharpe: The baseline Sharpe ratio from the clean backtest. Optional.
+            membership: Optional index membership intervals for point-in-time filtering.
 
         Returns:
             Dictionary containing noise_score, missing_data_score, overall_score, and failure_reasons.
@@ -226,7 +228,7 @@ class RobustnessEvaluator:
                 start_date,
                 end_date,
                 lambda df: df.copy(),
-                formula,
+                membership,
             )
 
         # Noise levels & Missing data levels to test
@@ -246,8 +248,10 @@ class RobustnessEvaluator:
                     tickers,
                     start_date,
                     end_date,
-                    lambda df, lvl=level: perturb_gaussian(df, lvl),  # type: ignore[misc]
-                    formula,
+                    # Distinct seed per iteration; within one backtest every read of
+                    # the perturbed storage reuses it, so signals and returns agree.
+                    lambda df, lvl=level, s=i: perturb_gaussian(df, lvl, seed=42 + s),  # type: ignore[misc]
+                    membership,
                 )
                 level_sharpes.append(sharpe)
                 if i == 0 and curve:
@@ -284,8 +288,8 @@ class RobustnessEvaluator:
                     tickers,
                     start_date,
                     end_date,
-                    lambda df, lvl=level: perturb_missing_data(df, lvl),  # type: ignore[misc]
-                    formula,
+                    lambda df, lvl=level, s=i: perturb_missing_data(df, lvl, seed=42 + s),  # type: ignore[misc]
+                    membership,
                 )
                 level_sharpes.append(sharpe)
                 if i == 0 and curve:
@@ -354,7 +358,7 @@ class RobustnessEvaluator:
         start_date: date,
         end_date: date,
         perturb_func: Callable[[pd.DataFrame], pd.DataFrame],
-        formula: str | None = None,
+        membership: list[UniverseEntry] | None = None,
     ) -> tuple[float, list[dict[str, Any]]]:
         """Helper to run a single backtest with a perturbed storage layer."""
         perturbed_storage = PerturbedStorage(self.base_storage, perturb_func)
@@ -363,7 +367,7 @@ class RobustnessEvaluator:
         try:
             # 1. Evaluate factor to generate daily raw signals
             signals_df = evaluator.evaluate(
-                factor_func, tickers, start_date, end_date, formula
+                factor_func, tickers, start_date, end_date, membership=membership
             )
             if signals_df.empty:
                 return 0.0, []

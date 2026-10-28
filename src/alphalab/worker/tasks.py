@@ -15,6 +15,7 @@ from alphalab.data.storage.duckdb import DuckDBStorage
 from alphalab.data.universe.nifty50 import NIFTY50Universe
 from alphalab.engine.robustness import RobustnessEvaluator
 from alphalab.engine.runner import ExperimentRunner
+from alphalab.engine.version import ENGINE_VERSION
 from alphalab.worker.celery import celery_app
 
 logger = logging.getLogger("alphalab.worker.tasks")
@@ -30,11 +31,20 @@ async def _check_and_update_experiment_status_async(
     )
     total_factors = (await session.execute(total_stmt)).scalar() or 0
 
-    # Count factors with both backtest and robustness results
+    # Count factors with both results from the current engine version (stale rows
+    # from an older engine must not mark a re-run experiment as complete)
     completed_stmt = select(func.count(Factor.id)).where(
         Factor.experiment_id == experiment_id,
-        Factor.id.in_(select(BacktestResult.factor_id)),
-        Factor.id.in_(select(RobustnessResult.factor_id)),
+        Factor.id.in_(
+            select(BacktestResult.factor_id).where(
+                BacktestResult.engine_version == ENGINE_VERSION
+            )
+        ),
+        Factor.id.in_(
+            select(RobustnessResult.factor_id).where(
+                RobustnessResult.engine_version == ENGINE_VERSION
+            )
+        ),
     )
     completed_factors = (await session.execute(completed_stmt)).scalar() or 0
 
@@ -112,8 +122,8 @@ async def _run_robustness_async(factor_id: str) -> None:
             storage = DuckDBStorage()
             start_date, end_date = storage.get_available_date_range()
             universe = NIFTY50Universe()
-            constituents = universe.get_constituents(end_date)
-            tickers = [c.ticker for c in constituents]
+            constituents = universe.get_constituents_between(start_date, end_date)
+            tickers = sorted({c.ticker for c in constituents})
 
             baseline_sharpe = (
                 factor.backtest_result.sharpe if factor.backtest_result else None
@@ -126,6 +136,7 @@ async def _run_robustness_async(factor_id: str) -> None:
                 start_date,
                 end_date,
                 baseline_sharpe,
+                constituents,
             )
 
             # Generate and cache robustness verdict
@@ -153,6 +164,7 @@ async def _run_robustness_async(factor_id: str) -> None:
                     perturbation_grid=res["perturbation_grid"],
                     verdict_robustness=v_robustness,
                     stressed_equity_curve=res["stressed_equity_curve"],
+                    engine_version=ENGINE_VERSION,
                 )
                 session.add(r_res)
             else:
@@ -163,6 +175,7 @@ async def _run_robustness_async(factor_id: str) -> None:
                 r_res.perturbation_grid = res["perturbation_grid"]
                 r_res.verdict_robustness = v_robustness
                 r_res.stressed_equity_curve = res["stressed_equity_curve"]
+                r_res.engine_version = ENGINE_VERSION
 
             await session.flush()
             await _check_and_update_experiment_status_async(

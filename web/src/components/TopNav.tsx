@@ -66,11 +66,22 @@ export default function TopNav() {
         {/* Right: profile */}
         <div className="nav-right">
           <span className="nav-profile-name">{userName}</span>
-          <img
-            src={`https://ui-avatars.com/api/?name=${userInitials}&background=1a1c18&color=fff&size=64`}
+          <div
             className="nav-avatar"
-            alt="Avatar"
-          />
+            aria-hidden="true"
+            style={{
+              background: "#1a1c18",
+              color: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "11px",
+              fontWeight: 600,
+              letterSpacing: "0.5px",
+            }}
+          >
+            {userInitials}
+          </div>
           <button
             onClick={async () => {
               await logout();

@@ -19,7 +19,9 @@ from alphalab.api.database.connection import get_db_session
 from alphalab.api.models.experiment import Experiment
 from alphalab.api.models.factor import Factor
 from alphalab.api.models.user import User
+from alphalab.common.exceptions import DataLeakageError, DSLCompilationError
 from alphalab.config.settings import settings
+from alphalab.dsl import compile_factor
 from alphalab.worker.tasks import run_backtest_task, run_robustness_task
 
 router = APIRouter(prefix="/experiments", tags=["Experiments"])
@@ -106,6 +108,16 @@ async def create_experiment(
     Returns:
         The generated Experiment record.
     """
+    # Reject invalid or look-ahead formulas up front instead of failing in the worker
+    for f in exp_in.factors:
+        try:
+            compile_factor(f.formula)
+        except (DSLCompilationError, DataLeakageError) as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid formula for factor '{f.name}': {e}",
+            ) from e
+
     if settings.MOCK_MODE:
         # MOCK RESPONSE FOR UI ITERATION
         new_exp = Experiment(

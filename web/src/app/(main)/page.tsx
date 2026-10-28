@@ -1,6 +1,5 @@
 import { getAuthToken } from "@/lib/actions";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import ClientDashboard from "./ClientDashboard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";

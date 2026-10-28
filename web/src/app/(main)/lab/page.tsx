@@ -3,27 +3,40 @@
 import { useState, useActionState } from "react";
 import { submitExperiment } from "@/lib/actions";
 import Link from "next/link";
+import type { ActionState } from "@/lib/types";
 
 const DSL_SECTIONS = [
   {
     title: "Available Inputs",
     items: [
-      { key: "close, open, high, low", desc: "Daily OHLC prices" },
-      { key: "volume, vwap", desc: "Volume and value-weighted avg price" },
-      { key: "returns", desc: "Daily log returns" },
+      { key: "close", desc: "Daily close, adjusted for splits and dividends" },
+      { key: "open, high, low", desc: "Daily open, high and low prices (unadjusted)" },
+      { key: "volume", desc: "Daily traded volume" },
+      { key: "returns", desc: "Daily simple returns of close (pct change)" },
     ],
   },
   {
     title: "Registered DSL Functions",
     items: [
-      { key: "Momentum(d)", desc: "d-day momentum strategy signal" },
-      { key: "Volatility(d)", desc: "d-day rolling volatility" },
-      { key: "RollingMean(d)", desc: "d-day rolling arithmetic mean" },
-      { key: "RollingStd(d)", desc: "d-day rolling standard deviation" },
-      { key: "Lag(x, d)", desc: "x shifted backwards by d days (to detect look-ahead bias)" },
-      { key: "Delta(x, d)", desc: "d-day difference (change) of x" },
-      { key: "ts_max(x, d)", desc: "d-day rolling maximum of x" },
-      { key: "ts_min(x, d)", desc: "d-day rolling minimum of x" },
+      { key: "Momentum(d)", desc: "d-day percentage change of close" },
+      { key: "Volatility(d)", desc: "d-day rolling std of daily returns" },
+      { key: "RollingMean(d)", desc: "d-day rolling mean of close" },
+      { key: "RollingStd(d)", desc: "d-day rolling std of close" },
+      { key: "delay(x, d) / Lag(x, d)", desc: "x from d days ago (d ≥ 0)" },
+      { key: "delta(x, d)", desc: "x minus x from d days ago" },
+      { key: "ts_max(x, d) / ts_min(x, d)", desc: "d-day rolling max / min of x" },
+      { key: "ts_rank(x, d)", desc: "percentile of today's x within its last d days" },
+      { key: "correlation(x, y, d)", desc: "d-day rolling correlation of x and y" },
+      { key: "rank(x)", desc: "percentile rank of x across stocks on each day" },
+      { key: "scale(x, a)", desc: "rescale x so |x| sums to a across stocks each day" },
+    ],
+  },
+  {
+    title: "Rules",
+    items: [
+      { key: "Windows", desc: "d must be a constant whole number (e.g. 20 or 30 - 10)" },
+      { key: "No look-ahead", desc: "negative shifts such as delay(close, -1) are rejected" },
+      { key: "Operators", desc: "+ - * / and parentheses" },
     ],
   },
   {
@@ -40,7 +53,7 @@ export default function LabPage() {
   const [openSection, setOpenSection] = useState<string | null>("Available Inputs");
 
   const [state, formAction, isPending] = useActionState(
-    async (prevState: any, formData: FormData) => {
+    async (_prevState: ActionState, formData: FormData): Promise<ActionState> => {
       return await submitExperiment(formData);
     },
     null

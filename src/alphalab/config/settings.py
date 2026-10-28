@@ -4,7 +4,13 @@ alphalab.config.settings
 Manages global configuration parameters and environment variable loading.
 """
 
+from urllib.parse import parse_qsl, urlencode
+
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Query parameters asyncpg does not accept as connect() kwargs
+_ASYNCPG_UNSUPPORTED_PARAMS = {"sslmode", "channel_binding", "options"}
 
 
 class Settings(BaseSettings):
@@ -41,11 +47,16 @@ class Settings(BaseSettings):
         elif url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
 
-        # Strip all query parameters that confuse asyncpg (like channel_binding, options, sslmode)
-        # and strictly append ?ssl=require if it's a remote connection
+        # Drop query parameters asyncpg rejects, translating libpq's sslmode into
+        # asyncpg's ssl. Other parameters are preserved.
         if "?" in url:
-            base_url = url.split("?")[0]
-            url = f"{base_url}?ssl=require"
+            base_url, query = url.split("?", 1)
+            params = parse_qsl(query, keep_blank_values=True)
+            sslmode = next((v for k, v in params if k == "sslmode"), None)
+            kept = [(k, v) for k, v in params if k not in _ASYNCPG_UNSUPPORTED_PARAMS]
+            if sslmode and not any(k == "ssl" for k, _ in kept):
+                kept.append(("ssl", sslmode))
+            url = f"{base_url}?{urlencode(kept)}" if kept else base_url
 
         return url
 
@@ -78,9 +89,22 @@ class Settings(BaseSettings):
         return url
 
     # JWT Authentication Settings
-    JWT_SECRET: str = "change_me_in_production_extremely_long_secret_key_here"
+    # Accept both the documented names (.env.example) and the legacy names so
+    # existing deployments keep working.
+    JWT_SECRET: str = Field(
+        default="change_me_in_production_extremely_long_secret_key_here",
+        validation_alias=AliasChoices("JWT_SECRET_KEY", "JWT_SECRET"),
+    )
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 45
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=45,
+        validation_alias=AliasChoices(
+            "JWT_EXPIRY_MINUTES", "ACCESS_TOKEN_EXPIRE_MINUTES"
+        ),
+    )
+
+    # Comma-separated browser origins allowed by CORS
+    CORS_ORIGINS: str = "http://localhost:3000,https://alphalab-hq.vercel.app"
 
     # Settings configuration
     model_config = SettingsConfigDict(

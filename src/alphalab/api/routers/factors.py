@@ -15,11 +15,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
+from alphalab.api.auth.jwt import get_current_user
 from alphalab.api.database.connection import get_db_session
 from alphalab.api.models.factor import Factor
 from alphalab.api.models.results import BacktestResult, RobustnessResult
+from alphalab.api.models.user import User
 
 router = APIRouter(prefix="/factors", tags=["Factors"])
+
+# The leaderboard is intentionally public and lists every user's factors.
+# Factor detail routes are readable by any logged-in user.
 
 # --- Response DTOs ---
 
@@ -63,6 +68,7 @@ class FactorDetailResponse(BaseModel):
 
 class BacktestResponse(BaseModel):
     equity_curve: list[dict[str, Any]]
+    ic_series: list[dict[str, Any]] = []
 
 
 class RobustnessResponse(BaseModel):
@@ -151,6 +157,7 @@ async def get_leaderboard(
 @router.get("/{factor_id}", response_model=FactorDetailResponse)
 async def get_factor_details(
     factor_id: uuid.UUID,
+    _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> FactorDetailResponse:
     """Retrieve basic metadata and scalar metrics for a factor."""
@@ -212,6 +219,7 @@ async def get_factor_details(
 @router.get("/{factor_id}/backtest", response_model=BacktestResponse)
 async def get_factor_backtest(
     factor_id: uuid.UUID,
+    _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> BacktestResponse:
     """Retrieve the equity curve for a factor."""
@@ -222,12 +230,15 @@ async def get_factor_backtest(
     if not b_res:
         raise HTTPException(status_code=404, detail="Backtest result not found")
 
-    return BacktestResponse(equity_curve=b_res.equity_curve or [])
+    return BacktestResponse(
+        equity_curve=b_res.equity_curve or [], ic_series=b_res.ic_series or []
+    )
 
 
 @router.get("/{factor_id}/robustness", response_model=RobustnessResponse)
 async def get_factor_robustness(
     factor_id: uuid.UUID,
+    _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
 ) -> RobustnessResponse:
     """Retrieve the robustness grid and failure analysis for a factor."""

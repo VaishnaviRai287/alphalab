@@ -56,3 +56,27 @@ def test_fetch_ohlcv_server_error(mock_download, provider):
 
     with pytest.raises(DataError, match="Failed to fetch market data"):
         provider.fetch_ohlcv(tickers, start_date, end_date)
+
+
+@patch("alphalab.data.providers.yahoo_provider.yf.download")
+def test_fetch_ohlcv_drops_pre_listing_rows(mock_download, provider):
+    """All-NaN rows before a ticker listed are dropped instead of failing validation."""
+    dates = pd.DatetimeIndex(["2023-01-02", "2023-01-03", "2023-01-04"], name="Date")
+    fields = ["Open", "High", "Low", "Close", "Adj Close", "Volume"]
+    columns = pd.MultiIndex.from_product(
+        [fields, ["OLD.NS", "NEW.NS", "GONE.NS"]], names=["Price", "Ticker"]
+    )
+    data = {}
+    for field in fields:
+        data[(field, "OLD.NS")] = [1.0, 2.0, 3.0]
+        data[(field, "NEW.NS")] = [float("nan"), 5.0, 6.0]  # listed on 2023-01-03
+        data[(field, "GONE.NS")] = [float("nan")] * 3  # no data at all
+    mock_download.return_value = pd.DataFrame(data, index=dates)[columns.to_list()].set_axis(columns, axis=1)
+
+    df = provider.fetch_ohlcv(["OLD.NS", "NEW.NS", "GONE.NS"], date(2023, 1, 2), date(2023, 1, 4))
+
+    assert (df["ticker"] == "OLD.NS").sum() == 3
+    new = df[df["ticker"] == "NEW.NS"]
+    assert len(new) == 2
+    assert not new["Close"].isna().any()
+    assert "GONE.NS" not in set(df["ticker"])

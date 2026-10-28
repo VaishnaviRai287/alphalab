@@ -70,7 +70,7 @@ User submits DSL formula (e.g. ts_rank(close, 10) - delay(close, 5))
 ┌─────────────────▼───────────────────────────┐
 │  FastAPI  (Uvicorn)                         │
 │  /experiments  /factors  /auth              │
-│  Returns 202 immediately; delegates to queue │
+│  Returns 201 immediately; delegates to queue │
 └──────────┬──────────────────────┬───────────┘
            │ PostgreSQL (async)    │ Redis (Celery broker)
 ┌──────────▼──────────┐  ┌────────▼──────────────────┐
@@ -86,7 +86,7 @@ User submits DSL formula (e.g. ts_rank(close, 10) - delay(close, 5))
                          └───────────────────────────┘
 ```
 
-The API never blocks on computation. When a factor is submitted, the API enqueues two Celery tasks (backtest and robustness) and returns immediately. The frontend polls for completion.
+The API never blocks on computation. When a factor is submitted, the API compiles the formula, enqueues two Celery tasks (backtest and robustness) and returns `201 Created` immediately. The frontend polls for completion.
 
 ---
 
@@ -113,7 +113,7 @@ variable      ::= IDENTIFIER
 | Validation | `StaticValidator` | AST traversal raising `DataLeakageError` on illegal temporal shifts |
 | Compilation | `PandasCompiler` | AST traversal → Python closure over a Pandas DataFrame |
 
-The compiled output is a `Callable[[pd.DataFrame], pd.Series]`. It is applied per-ticker using `groupby(...).apply()` to prevent cross-ticker data leakage.
+The compiled output is a `Callable[[pd.DataFrame], pd.Series]` that receives the full panel (all tickers, sorted by ticker then date). Time-series functions are grouped by ticker internally, so one stock's history never leaks into another's; cross-sectional functions (`rank`, `scale`) operate within each date.
 
 ### Supported primitives
 
@@ -128,20 +128,21 @@ The compiled output is a `Callable[[pd.DataFrame], pd.Series]`. It is applied pe
 | `ts_max(x, n)` | series, window | Rolling max |
 | `ts_min(x, n)` | series, window | Rolling min |
 | `ts_rank(x, n)` | series, window | Rolling percentile rank |
-| `scale(x, target)` | series, scalar | L1-normalize to `target` gross exposure |
+| `scale(x, target)` | series, constant | Rescale so `abs(x)` sums to `target` across stocks on each date |
 | `correlation(x, y, n)` | series, series, window | Rolling Pearson correlation |
-| `rank(x)` | series | Cross-sectional percentile rank |
+| `rank(x)` | series | Cross-sectional percentile rank within each date (composes anywhere in a formula) |
 
 Binary arithmetic (`+`, `-`, `*`, `/`) composes freely across all of the above.
 
 ### Look-ahead bias prevention
 
-The `StaticValidator` traverses the AST before compilation and raises `DataLeakageError` for:
-- Negative shift values in `delay` / `Lag` (e.g., `Lag(close, -1)` would read tomorrow's price)
-- Zero or negative window sizes in all rolling functions
-- Non-integer window parameters (which would indicate a runtime-computed window that cannot be statically verified)
+The `StaticValidator` traverses the AST before compilation. Window and shift arguments must be constant expressions; they are folded to a number first (so `delay(close, 0-1)` is treated exactly like `delay(close, -1)`). It then raises:
+- `DataLeakageError` for negative shifts in `delay` / `Lag` (e.g. `Lag(close, -1)` would read tomorrow's price)
+- `DataLeakageError` for zero or negative windows in all rolling functions
+- `DSLCompilationError` for non-integer or data-dependent windows (e.g. `delay(close, volume)`), which cannot be statically verified
+- `DSLCompilationError` for unknown variables (supported: `open`, `high`, `low`, `close`, `volume`, `returns`)
 
-This is enforced at parse time, before any data is touched. A factor that would introduce temporal leakage cannot be submitted — it fails at the AST stage.
+The API compiles every formula when an experiment is submitted and rejects invalid or leaking formulas with `422`, before anything is saved or queued.
 
 ---
 
@@ -160,9 +161,9 @@ See [ADR-005](docs/adr/ADR-005-duckdb.md) for the full evaluation of PostgreSQL-
 
 ### NIFTY 50 Universe
 
-Universe membership is resolved from a versioned CSV (`nifty50_history.csv`) containing constituent intervals with `effective_from` and `effective_to` dates. Membership is resolved **point-in-time**: a constituent is included in a backtest if and only if it was active in the index on the evaluation date.
+Universe membership is resolved from a versioned CSV (`nifty50_history.csv`) containing constituent intervals with `effective_from` (inclusive) and `effective_to` (exclusive) dates. Membership is resolved **point-in-time**: ingestion downloads every stock that was in the index at any point in the window, signals are computed on each stock's full price history, and a stock only receives portfolio weight on days it was an index member.
 
-This means a factor is never evaluated on stocks that were not actually in the index on a given day — a basic control for **survivorship bias**. However, the CSV covers the period in our dataset; survivorship bias from stocks that were removed from NIFTY 50 before our data window is not addressed.
+This means a factor is never evaluated on stocks that were not actually in the index on a given day, and stocks that later left the index are still included while they were members — a basic control for **survivorship bias**. Accuracy depends on the CSV being complete and on Yahoo Finance still serving prices for delisted or renamed tickers.
 
 ### Data ingestion pipeline
 
@@ -182,11 +183,9 @@ The pipeline drops entire tickers that fail schema validation rather than silent
 
 ### Signal generation
 
-The compiled DSL callable is applied per-ticker over the OHLCV DataFrame via `groupby("ticker").apply()`. This ensures the factor function for one ticker never receives data from another.
+The compiled DSL callable is applied once to the full OHLCV panel. Time-series operations inside it group by ticker, so one ticker's values never use another's data. Signals are then restricted to days on which each ticker was an index member. Infinite values (e.g. from division by zero) are dropped along with NaNs.
 
 The evaluator uses **adjusted close prices** (`adj_close`). If both `close` and `adj_close` are present, `adj_close` replaces `close` before any computation.
-
-If the formula contains a `rank(...)` call, a cross-sectional percentile rank is applied per date after per-ticker signal generation.
 
 ### Portfolio construction
 
@@ -236,7 +235,7 @@ After the baseline backtest runs, the robustness engine executes **18 additional
 | Random consecutive data drops | 5%, 10%, 20% | 3 | 9 |
 | **Total** | | | **18** |
 
-The **noise perturbation** adds multiplicative Gaussian noise (`1 + N(0, σ²)`) to all price and volume columns, using a fixed-seed RNG per iteration for reproducibility. This simulates bid-ask spread uncertainty and execution slippage.
+The **noise perturbation** adds multiplicative Gaussian noise (`1 + N(0, σ²)`) to all price and volume columns, using a different fixed seed for each iteration (42, 43, 44), so the three iterations are independent draws but every run is reproducible. This simulates bid-ask spread uncertainty and execution slippage.
 
 The **missing-data perturbation** randomly drops consecutive chunks of rows per ticker, simulating illiquidity gaps and data quality failures.
 
@@ -284,7 +283,7 @@ See [ADR-005](docs/adr/ADR-005-duckdb.md).
 
 *Problem:* A full backtest + 18-fold robustness grid takes 2–3 minutes. Blocking the web server thread for this duration would fail any standard HTTP timeout.
 
-*Decision:* The FastAPI layer enqueues two Celery tasks and returns a `202 Accepted` immediately. The worker manages DB state transitions (`PENDING → RUNNING → COMPLETED / FAILED`). The frontend polls the API for status.
+*Decision:* The FastAPI layer enqueues two Celery tasks and returns `201 Created` with the experiment immediately. The worker manages DB state transitions (`PENDING → RUNNING → COMPLETED / FAILED`). The frontend polls the API for status.
 
 *Trade-off:* Adds operational complexity (two extra services: Redis broker + Celery worker process). A single queue is used in v1 — a user submitting a large batch of stress tests can queue-block other users.
 
@@ -302,7 +301,7 @@ See [ADR-011](docs/adr/ADR-011-async-sqlalchemy-in-sync-celery.md).
 
 ## Testing
 
-The test suite contains **104 tests** across 21 test modules.
+The test suite contains **145 tests** across 22 test modules.
 
 ```bash
 pytest tests/ -v
@@ -323,7 +322,7 @@ Coverage numbers are from the internal audit (`docs/audits/04_TESTING.md`, measu
 - The portfolio constructor produces dollar-neutral weights summing to zero net exposure
 - The Sharpe ratio calculation matches the `√252 × (μ/σ)` formula on controlled return sequences
 - The robustness evaluator correctly averages perturbed Sharpe ratios and clamps retention to `[0, 1]`
-- API routes return `202` on factor submission without waiting for backtest completion
+- API routes return `201` on factor submission without waiting for backtest completion
 
 **Known gaps:**
 - `yahoo_provider.py` is 16% covered — HTTP error handling is not integration-tested (no mocked API responses)
@@ -442,7 +441,7 @@ alphalab/
 │   ├── utils/         Shared utilities
 │   └── worker/        Celery app definition, task definitions, verdict generators
 ├── web/               Next.js frontend (App Router, TypeScript)
-├── tests/             104 tests across 21 modules
+├── tests/             145 tests across 22 modules
 ├── alembic/           Database migration scripts
 ├── scripts/           bootstrap.py, ingest_data.py, seed_demo.py
 ├── infra/             Docker Compose, .env.example

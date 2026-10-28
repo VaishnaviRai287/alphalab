@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo } from "react";
 import { useReactToPrint } from "react-to-print";
-import Link from "next/link";
 import {
   LineChart,
   Line,
@@ -13,29 +12,32 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   ResponsiveContainer,
-  ReferenceDot
+  ReferenceDot,
+  ReferenceLine
 } from "recharts";
 import ClientCharts from "./ClientCharts";
+import type { BacktestPayload, CurvePoint, FactorDetail, RobustnessPayload } from "@/lib/types";
 
 interface ClientFactorDetailProps {
-  detail: any;
-  backtest: any;
-  robustness: any;
+  detail: FactorDetail;
+  backtest: BacktestPayload | null;
+  robustness: RobustnessPayload | null;
 }
+
+type ModalId = "sharpe" | "ic" | "mdd" | "robustness" | "grade";
+type DrawdownPoint = CurvePoint & { dateStr: string; rawDate: string };
 
 export default function ClientFactorDetail({ detail, backtest, robustness }: ClientFactorDetailProps) {
   // Modal state
-  const [activeModal, setActiveModal] = useState<"sharpe" | "ic" | "mdd" | "robustness" | null>(null);
+  const [activeModal, setActiveModal] = useState<ModalId | null>(null);
 
   const metrics = detail.metrics || {};
-  const hasBacktest = backtest && backtest.equity_curve && backtest.equity_curve.length > 0;
-  const hasRobustness = robustness && robustness.grid && robustness.grid.length > 0;
+  const hasBacktest = !!backtest && backtest.equity_curve.length > 0;
 
   // ─── SHARPE RATIO BREAKDOWN DATA ───
-  const { returnsBuckets, meanReturn, stdReturn } = useMemo(() => {
-    if (!hasBacktest) return { returnsBuckets: [], meanReturn: 0, stdReturn: 0 };
+  const returnsBuckets = useMemo(() => {
+    if (!backtest || !hasBacktest) return [];
 
     // Extract daily returns from cumulative returns
     const curve = backtest.equity_curve;
@@ -48,11 +50,7 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
       }
     }
 
-    if (dailyReturns.length < 2) return { returnsBuckets: [], meanReturn: 0, stdReturn: 0 };
-
-    const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length;
-    const variance = dailyReturns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (dailyReturns.length - 1);
-    const std = Math.sqrt(variance);
+    if (dailyReturns.length < 2) return [];
 
     // Create 15 histogram bins
     const minVal = Math.min(...dailyReturns);
@@ -62,7 +60,6 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
 
     const bins = Array.from({ length: numBins }, (_, idx) => {
       const binMin = minVal + idx * binWidth;
-      const binMax = binMin + binWidth;
       return {
         name: `${(binMin * 100).toFixed(1)}%`,
         count: 0
@@ -75,42 +72,33 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
       if (binIdx >= 0) bins[binIdx].count++;
     }
 
-    return { returnsBuckets: bins, meanReturn: mean, stdReturn: std };
+    return bins;
   }, [backtest, hasBacktest]);
 
   // ─── INFORMATION COEFFICIENT SPARKLINE DATA ───
+  // Real monthly mean IC computed by the backtest (empty for results computed
+  // before the series was stored; they are refreshed by the startup re-run)
   const { icSparklineData, negativePeriodPct } = useMemo(() => {
-    const meanIc = metrics.ic ?? 0.0;
-    // Generate a deterministic daily/weekly-like IC distribution for visualization
-    const pointsCount = 30;
-    const data = Array.from({ length: pointsCount }, (_, idx) => {
-      // Deterministic noise centered around mean IC
-      const noise = Math.sin(idx * 0.8) * 0.06 + Math.cos(idx * 1.4) * 0.03;
-      const pointVal = meanIc + noise;
-      return {
-        name: `P${idx + 1}`,
-        IC: parseFloat(pointVal.toFixed(4))
-      };
-    });
-
-    const negCount = data.filter(d => d.IC < 0).length;
-    const negPct = ((negCount / pointsCount) * 100).toFixed(0);
-
+    const series = backtest?.ic_series ?? [];
+    const data = series.map((p) => ({ name: p.month, IC: p.ic }));
+    const negPct = data.length
+      ? ((data.filter((d) => d.IC < 0).length / data.length) * 100).toFixed(0)
+      : null;
     return { icSparklineData: data, negativePeriodPct: negPct };
-  }, [metrics.ic]);
+  }, [backtest]);
 
   // ─── MAX DRAWDOWN PEAK/TROUGH DATE MARKS ───
   const { formattedDrawdownCurve, peakPoint, troughPoint, recoveryGainRequired } = useMemo(() => {
-    if (!hasBacktest) return { formattedDrawdownCurve: [], peakPoint: null, troughPoint: null, recoveryGainRequired: 0 };
+    if (!backtest || !hasBacktest) return { formattedDrawdownCurve: [], peakPoint: null, troughPoint: null, recoveryGainRequired: 0 };
 
-    const curve = backtest.equity_curve.map((d: any) => ({
+    const curve: DrawdownPoint[] = backtest.equity_curve.map((d) => ({
       ...d,
       dateStr: new Date(d.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "2-digit" }),
       rawDate: d.date.split("T")[0]
     }));
 
-    const pPt = curve.find((x: any) => x.rawDate === detail.mdd_peak_date);
-    const tPt = curve.find((x: any) => x.rawDate === detail.mdd_trough_date);
+    const pPt = curve.find((x) => x.rawDate === detail.mdd_peak_date) ?? null;
+    const tPt = curve.find((x) => x.rawDate === detail.mdd_trough_date) ?? null;
 
     const mddVal = metrics.max_drawdown || 0.0;
     const recovery = mddVal < 1.0 ? (1 / (1 - mddVal)) - 1 : 0.0;
@@ -124,16 +112,15 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
   }, [backtest, hasBacktest, detail, metrics.max_drawdown]);
 
   // ─── ROBUSTNESS AVERAGES & GRID DATA ───
-  const { stressedAvgSharpe, baselineSharpe, robustnessRatio } = useMemo(() => {
-    const baseSharpe = metrics.sharpe || 0.0;
-    const ratio = robustness?.overall_score || 0.0;
-    const stressedAvg = baseSharpe * ratio;
+  // Recompute the stored score from the stored grid so the modal shows real inputs
+  const { noiseScore, missingScore } = useMemo(() => {
+    const grid = robustness?.grid ?? [];
+    const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
     return {
-      stressedAvgSharpe: stressedAvg,
-      baselineSharpe: baseSharpe,
-      robustnessRatio: ratio
+      noiseScore: mean(grid.filter((g) => g.perturbation === "noise").map((g) => g.retention)),
+      missingScore: mean(grid.filter((g) => g.perturbation === "missing_data").map((g) => g.retention)),
     };
-  }, [metrics.sharpe, robustness]);
+  }, [robustness]);
 
   // ─── STRATEGY GRADE ───
   const gradeData = useMemo(() => {
@@ -150,21 +137,21 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
       id: "sharpe",
       label: "Sharpe Ratio",
       value: metrics.sharpe != null ? metrics.sharpe.toFixed(2) : "—",
-      color: metrics.sharpe >= 1.0 ? "#0f766e" : "#1a1c18",
+      color: (metrics.sharpe ?? 0) >= 1.0 ? "#0f766e" : "#1a1c18",
       formula: "Sharpe = √252 * (μ_daily / σ_daily)",
       desc: "Annualized excess return per unit of volatility.",
       verdict: detail.verdict_sharpe,
-      isWarning: metrics.sharpe < 0.5
+      isWarning: (metrics.sharpe ?? 0) < 0.5
     },
     {
       id: "ic",
       label: "Info Coefficient",
       value: metrics.ic != null ? metrics.ic.toFixed(3) : "—",
-      color: metrics.ic < 0.0 ? "#b91c1c" : "#1a1c18",
+      color: (metrics.ic ?? 0) < 0.0 ? "#b91c1c" : "#1a1c18",
       formula: "IC = mean(RankCorr(Signal, Return))",
       desc: "Spearman rank correlation of signal to forward return.",
       verdict: detail.verdict_ic,
-      isWarning: metrics.ic < 0.0
+      isWarning: (metrics.ic ?? 0) < 0.0
     },
     {
       id: "mdd",
@@ -174,14 +161,14 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
       formula: "MDD = max((Peak - Value) / Peak)",
       desc: "Worst peak-to-trough drop in strategy equity.",
       verdict: detail.verdict_mdd,
-      isWarning: metrics.max_drawdown > 0.30
+      isWarning: (metrics.max_drawdown ?? 0) > 0.30
     },
     {
       id: "robustness",
       label: "Robustness Score",
       value: robustness?.overall_score != null ? robustness.overall_score.toFixed(2) : "—",
       color: (robustness?.overall_score ?? 0) >= 0.8 ? "#0f766e" : "#b91c1c",
-      formula: "Score = Stressed_Avg / Baseline",
+      formula: "Score = mean(clamp(Stressed / Baseline, 0, 1))",
       desc: "Ratio of performance retained under synthetic stress tests.",
       verdict: detail.verdict_robustness,
       isWarning: (robustness?.overall_score ?? 0) < 0.80
@@ -235,10 +222,10 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
 
       {/* ─── Metric tiles ─── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", marginBottom: "32px", marginLeft: "1px" }}>
-        {cards.map((m, i, arr) => (
+        {cards.map((m, i) => (
           <div
             key={m.label}
-            onClick={() => setActiveModal(m.id as any)}
+            onClick={() => setActiveModal(m.id as ModalId)}
             style={{
               padding: "20px 24px",
               borderTop: "1px solid #1a1c18",
@@ -400,12 +387,19 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
                   <br />
                   &nbsp;&nbsp;&nbsp;= {metrics.ic != null ? metrics.ic.toFixed(4) : "—"}
                 </div>
-                <div style={{ fontSize: "12px", color: "var(--ink-light)", marginBottom: "16px", fontWeight: 500 }}>
-                  Stat: IC was negative in <span style={{ color: "#b91c1c" }}>{negativePeriodPct}%</span> of observed periods.
-                </div>
+                {negativePeriodPct !== null && (
+                  <div style={{ fontSize: "12px", color: "var(--ink-light)", marginBottom: "16px", fontWeight: 500 }}>
+                    Stat: monthly IC was negative in <span style={{ color: "#b91c1c" }}>{negativePeriodPct}%</span> of {icSparklineData.length} months.
+                  </div>
+                )}
 
                 <div style={{ marginTop: "24px" }}>
-                  <div className="al-tag" style={{ marginBottom: "12px" }}>Per-Period IC Sparkline (Time Series)</div>
+                  <div className="al-tag" style={{ marginBottom: "12px" }}>Monthly Mean IC (Time Series)</div>
+                  {icSparklineData.length === 0 ? (
+                    <div style={{ fontSize: "12px", color: "var(--ink-faint)" }}>
+                      The IC time series for this factor is still being computed.
+                    </div>
+                  ) : (
                   <div style={{ width: "100%", height: 160 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={icSparklineData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
@@ -418,10 +412,12 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
                         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                         <XAxis dataKey="name" fontSize={9} />
                         <YAxis fontSize={9} domain={["auto", "auto"]} />
+                        <ReferenceLine y={0} stroke="#8a9085" strokeDasharray="2 2" />
                         <Area type="monotone" dataKey="IC" stroke="var(--accent)" fill="url(#icColor)" />
                       </AreaChart>
                     </ResponsiveContainer>
                   </div>
+                  )}
                 </div>
               </div>
             )}
@@ -481,14 +477,14 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
             {activeModal === "robustness" && (
               <div>
                 <p style={{ fontSize: "13px", color: "var(--ink-light)", lineHeight: 1.6 }}>
-                  The Robustness Score evaluates factor stability under synthetic perturbations. It is calculated by dividing the average Sharpe ratio across 6 stress levels (noise and data drop) by the baseline Sharpe ratio:
+                  The Robustness Score evaluates factor stability under synthetic perturbations. Each of the 6 stress levels gets a retention ratio — its average stressed Sharpe divided by the baseline Sharpe, clamped to [0, 1] (0 if the baseline Sharpe is not positive). The score averages the two families:
                 </p>
                 <div style={{ fontFamily: "var(--font-mono)", fontSize: "11px", background: "var(--cream)", padding: "12px", border: "1px solid var(--border-soft)", margin: "16px 0", lineHeight: 1.5 }}>
-                  Score = Stressed_Avg / Baseline
+                  Noise = mean(retention at 0.5%, 1%, 2%) = {noiseScore.toFixed(4)}
                   <br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= {stressedAvgSharpe.toFixed(4)} / {baselineSharpe.toFixed(4)}
+                  Missing = mean(retention at 5%, 10%, 20%) = {missingScore.toFixed(4)}
                   <br />
-                  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;= {robustnessRatio.toFixed(4)}
+                  Score = (Noise + Missing) / 2 = {robustness?.overall_score != null ? robustness.overall_score.toFixed(4) : "—"}
                 </div>
 
                 {/* Grid performance sub-scores table */}
@@ -503,7 +499,7 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
                       </tr>
                     </thead>
                     <tbody>
-                      {robustness?.grid?.map((g: any, idx: number) => (
+                      {robustness?.grid?.map((g, idx) => (
                         <tr key={idx} style={{ borderBottom: "1px solid var(--border-soft)" }}>
                           <td style={{ padding: "6px 8px" }}>{g.perturbation === "noise" ? "Gaussian Noise" : "Missing Data"} {(g.level * 100).toFixed(1)}%</td>
                           <td style={{ padding: "6px 8px", textAlign: "right" }}>{g.sharpe.toFixed(4)}</td>
@@ -555,9 +551,9 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
                 borderTop: "1px dashed #ddddd9",
                 paddingTop: "16px"
               }}>
-                <div className="al-tag" style={{ marginBottom: "6px" }}>LLM Verdict</div>
+                <div className="al-tag" style={{ marginBottom: "6px" }}>Verdict</div>
                 <p style={{ fontSize: "12.5px", fontWeight: 500, fontStyle: "italic", margin: 0, color: cards.find(x => x.id === activeModal)?.isWarning ? "#b91c1c" : "var(--ink)" }}>
-                  "{cards.find(x => x.id === activeModal)?.verdict}"
+                  &quot;{cards.find(x => x.id === activeModal)?.verdict}&quot;
                 </p>
               </div>
             )}
@@ -649,7 +645,6 @@ export default function ClientFactorDetail({ detail, backtest, robustness }: Cli
         equityCurve={backtest?.equity_curve || []}
         robustnessGrid={robustness?.grid || []}
         stressedEquityCurve={robustness?.stressed_equity_curve || []}
-        overallScore={robustness?.overall_score ?? 1.0}
       />
     </div>
   );

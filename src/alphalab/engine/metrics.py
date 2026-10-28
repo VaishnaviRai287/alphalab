@@ -4,6 +4,8 @@ alphalab.engine.metrics
 Calculates core portfolio performance metrics.
 """
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -82,9 +84,26 @@ class PerformanceCalculator:
             metrics["max_drawdown"] = abs(drawdown.min()) if not pd.isna(drawdown.min()) else 0.0
 
         # 3. Information Coefficient (IC)
+        daily_ics = PerformanceCalculator.daily_ic_series(signals_df, prices_df)
+        metrics["ic"] = float(daily_ics.mean()) if not daily_ics.empty else 0.0
+
+        return metrics
+
+    @staticmethod
+    def daily_ic_series(signals_df: pd.DataFrame, prices_df: pd.DataFrame) -> pd.Series:
+        """
+        Spearman rank correlation of signal vs. next-day return, per date.
+
+        Args:
+            signals_df: Raw alpha signals ['date', 'ticker', 'signal'].
+            prices_df: OHLCV DataFrame.
+
+        Returns:
+            Series of daily IC values indexed by date (dates with no valid
+            correlation are dropped).
+        """
         if signals_df.empty or prices_df.empty:
-            metrics["ic"] = 0.0
-            return metrics
+            return pd.Series(dtype=float)
 
         price_col = "adj_close" if "adj_close" in prices_df.columns else "close"
         prices = prices_df.sort_values(by=["ticker", "date"]).copy()
@@ -97,19 +116,26 @@ class PerformanceCalculator:
             how="inner"
         )
         merged = merged.dropna(subset=["signal", "fwd_return"])
-
         if merged.empty:
-            metrics["ic"] = 0.0
-        else:
-            def daily_ic(group: pd.DataFrame) -> float:
-                if len(group) < 2:
-                    return 0.0
-                # Spearman rank correlation
-                return float(group["signal"].corr(group["fwd_return"], method="spearman"))
+            return pd.Series(dtype=float)
 
-            daily_ics = merged.groupby("date").apply(daily_ic, include_groups=False)
-            # Filter out NaNs if correlation failed
-            daily_ics = daily_ics.dropna()
-            metrics["ic"] = daily_ics.mean() if not daily_ics.empty else 0.0
+        def daily_ic(group: pd.DataFrame) -> float:
+            if len(group) < 2:
+                return 0.0
+            # Spearman rank correlation
+            return float(group["signal"].corr(group["fwd_return"], method="spearman"))
 
-        return metrics
+        daily_ics = merged.groupby("date").apply(daily_ic, include_groups=False)
+        # Filter out NaNs if correlation failed
+        return daily_ics.dropna()
+
+    @staticmethod
+    def monthly_ic_series(daily_ics: pd.Series) -> list[dict[str, Any]]:
+        """Average daily IC per calendar month, for charting IC stability over time."""
+        if daily_ics.empty:
+            return []
+        monthly = daily_ics.groupby(pd.to_datetime(daily_ics.index).to_period("M")).mean()
+        return [
+            {"month": str(period), "ic": round(float(val), 4)}
+            for period, val in monthly.items()
+        ]

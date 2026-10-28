@@ -3,10 +3,11 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { register } from "@/lib/actions";
+import type { ActionState } from "@/lib/types";
 
 export default function RegisterPage() {
   const [state, formAction, isPending] = useActionState(
-    async (prevState: any, formData: FormData) => {
+    async (_prevState: ActionState, formData: FormData): Promise<ActionState> => {
       return await register(formData);
     },
     null

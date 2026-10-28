@@ -56,16 +56,16 @@ class IngestionPipeline:
         # 1. Initialize DB tables
         self.storage.initialize_schema()
 
-        # 2. Resolve Point-in-time Constituents over the date range
-        # We query the constituents active at the end_date of the run
-        universe_entries = self.universe.get_constituents(end_date)
+        # 2. Resolve every constituent that was in the index at any point in the
+        # range, so stocks that later left the index are ingested too
+        universe_entries = self.universe.get_constituents_between(start_date, end_date)
         if not universe_entries:
             logger.warning(
-                f"[DataIngestion] [Pipeline] Resolved empty universe constituents list on date {end_date}."
+                f"[DataIngestion] [Pipeline] Resolved empty universe constituents list between {start_date} and {end_date}."
             )
             return
 
-        tickers = [e.ticker for e in universe_entries]
+        tickers = sorted({e.ticker for e in universe_entries})
         logger.info(
             f"[DataIngestion] [Pipeline] Resolved {len(tickers)} active constituents: {tickers}"
         )

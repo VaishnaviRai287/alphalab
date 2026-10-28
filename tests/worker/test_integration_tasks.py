@@ -73,7 +73,7 @@ def test_backtest_task_integration_success(
 
     # 2. Mock NIFTY50Universe point-in-time constituent resolver
     mock_universe = MagicMock()
-    mock_universe.get_constituents.return_value = [
+    mock_universe.get_constituents_between.return_value = [
         UniverseEntry("RELIANCE.NS", "NIFTY50", date(2020, 1, 1), None),
         UniverseEntry("TCS.NS", "NIFTY50", date(2020, 1, 1), None),
     ]
@@ -123,6 +123,8 @@ def test_backtest_task_integration_success(
     assert added_obj.sharpe is not None
     assert added_obj.max_drawdown is not None
     assert added_obj.ic is not None
+    assert isinstance(added_obj.ic_series, list)
+    assert added_obj.engine_version is not None
 
     # Verify session was committed
     mock_session.commit.assert_called_once()
@@ -143,7 +145,7 @@ def test_robustness_task_integration_success(
     mock_run_storage_class.return_value = temp_duckdb
 
     mock_universe = MagicMock()
-    mock_universe.get_constituents.return_value = [
+    mock_universe.get_constituents_between.return_value = [
         UniverseEntry("RELIANCE.NS", "NIFTY50", date(2020, 1, 1), None),
         UniverseEntry("TCS.NS", "NIFTY50", date(2020, 1, 1), None),
     ]

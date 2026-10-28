@@ -3,10 +3,11 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { login } from "@/lib/actions";
+import type { ActionState } from "@/lib/types";
 
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(
-    async (prevState: any, formData: FormData) => {
+    async (_prevState: ActionState, formData: FormData): Promise<ActionState> => {
       return await login(formData);
     },
     null
