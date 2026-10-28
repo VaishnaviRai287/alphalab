@@ -26,6 +26,23 @@ SUPPORTED_FUNCTIONS: dict[str, int] = {
 }
 
 
+# Columns the evaluator exposes to formulas. close is adjusted close; the
+# capitalized names are aliases kept for older formulas.
+SUPPORTED_VARIABLES = {
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "returns",
+    "Open",
+    "High",
+    "Low",
+    "Price",
+    "Volume",
+}
+
+
 def is_supported_function(name: str) -> bool:
     """Check if the given function name is registered in the DSL (case-insensitive)."""
     name_lower = name.lower()

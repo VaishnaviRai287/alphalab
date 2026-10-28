@@ -73,3 +73,18 @@ def test_calculate_metrics():
     # Rank of signals: B > A. Rank of returns: B > A.
     # Perfect positive correlation (IC = 1.0)
     assert metrics["ic"] == pytest.approx(1.0)
+
+
+def test_monthly_ic_series():
+    """Daily ICs are averaged per calendar month and match the scalar IC inputs."""
+    from alphalab.engine.metrics import PerformanceCalculator
+
+    daily = pd.Series(
+        [0.1, 0.3, -0.2, 0.0],
+        index=pd.to_datetime(["2024-01-02", "2024-01-03", "2024-02-01", "2024-02-02"]),
+    )
+    assert PerformanceCalculator.monthly_ic_series(daily) == [
+        {"month": "2024-01", "ic": 0.2},
+        {"month": "2024-02", "ic": -0.1},
+    ]
+    assert PerformanceCalculator.monthly_ic_series(pd.Series(dtype=float)) == []

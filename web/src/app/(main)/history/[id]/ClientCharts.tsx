@@ -17,17 +17,24 @@ import {
   BarChart,
   Bar
 } from "recharts";
+import type { CurvePoint, GridRow } from "@/lib/types";
 
 interface ClientChartsProps {
-  equityCurve: any[];
-  robustnessGrid: any[];
-  stressedEquityCurve?: any[];
-  overallScore?: number;
-  scenarioName?: string;
+  equityCurve: CurvePoint[];
+  robustnessGrid: GridRow[];
+  stressedEquityCurve?: CurvePoint[];
 }
 
+// One plotted day: baseline and stressed equity on the same date
+type ChartRow = CurvePoint & {
+  dateStr: string;
+  "Baseline Factor": number;
+  "Stressed Factor": number;
+  Divergence: number;
+};
+
 // Find closest trading day dateStr for vertical reference lines
-const findClosestDateStr = (targetIsoDate: string, data: any[]) => {
+const findClosestDateStr = (targetIsoDate: string, data: ChartRow[]) => {
   if (!data || data.length === 0) return "";
   const targetTime = new Date(targetIsoDate).getTime();
   let closestItem = data[0];
@@ -51,7 +58,7 @@ const findClosestDateStr = (targetIsoDate: string, data: any[]) => {
 };
 
 // Calculate summary stats over currently-visible data slice
-const calculateStats = (activeData: any[]) => {
+const calculateStats = (activeData: ChartRow[]) => {
   if (!activeData || activeData.length < 2) {
     return {
       baselineLatest: 1.0,
@@ -135,7 +142,7 @@ const calculateStats = (activeData: any[]) => {
 };
 
 // Index preset helper
-const getPresetIndices = (preset: string, data: any[]) => {
+const getPresetIndices = (preset: string, data: ChartRow[]) => {
   if (!data || data.length === 0) return { start: 0, end: 0 };
   const endIdx = data.length - 1;
   if (preset === "Max") return { start: 0, end: endIdx };
@@ -158,7 +165,7 @@ const getPresetIndices = (preset: string, data: any[]) => {
 };
 
 // Premium Custom Tooltip Component
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: { payload: ChartRow }[]; label?: string }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     const baseline = data["Baseline Factor"];
@@ -201,8 +208,6 @@ export default function ClientCharts({
   equityCurve,
   robustnessGrid,
   stressedEquityCurve = [],
-  overallScore = 0.8,
-  scenarioName = "FII Selloff Scenario"
 }: ClientChartsProps) {
   // 1. Map backend stressed equity curve values for date-aligned lookup
   const stressedMap = useMemo(() => {
@@ -262,7 +267,7 @@ export default function ClientCharts({
   };
 
   // Brush handle change callback
-  const handleBrushChange = (range: any) => {
+  const handleBrushChange = (range: { startIndex?: number; endIndex?: number }) => {
     if (range && typeof range.startIndex === "number" && typeof range.endIndex === "number") {
       setRangePreset("Custom");
       setZoomIndex({ start: range.startIndex, end: range.endIndex });
@@ -444,7 +449,7 @@ export default function ClientCharts({
                 )}
 
                 <Line type="monotone" name="Baseline Factor" dataKey="Baseline Factor" stroke="#1a1c18" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                <Line type="monotone" name={`Stressed — ${scenarioName}`} dataKey="Stressed Factor" stroke="#b91c1c" strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={{ r: 4 }} />
+                <Line type="monotone" name="Stressed — median robustness run" dataKey="Stressed Factor" stroke="#b91c1c" strokeWidth={1.5} strokeDasharray="4 4" dot={false} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           ) : (

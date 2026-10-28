@@ -144,6 +144,20 @@ class YahooProvider(MarketDataProvider):
             )
             raise DataError("Downloaded dataset is missing ticker column mapping.")
 
+        # A bulk download fills dates where a ticker did not trade (before listing,
+        # after delisting) with all-NaN price rows. Drop those so a stock that
+        # listed mid-window keeps its real history instead of failing validation.
+        price_cols = [
+            c for c in ("Open", "High", "Low", "Close", "Adj Close") if c in raw_df.columns
+        ]
+        if price_cols:
+            raw_df = raw_df.dropna(subset=price_cols, how="all")
+            missing = sorted(set(tickers) - set(raw_df["ticker"].unique()))
+            if missing:
+                logger.warning(
+                    f"[DataIngestion] [YahooProvider] No price data returned for: {missing}"
+                )
+
         logger.debug(
             f"[DataIngestion] [YahooProvider] Prepared long-format DataFrame with {len(raw_df)} rows"
         )

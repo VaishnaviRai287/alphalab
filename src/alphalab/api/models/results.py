@@ -7,7 +7,7 @@ Defines the database schema mapping for Factor Backtesting and Stress Results.
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Float, ForeignKey, String
+from sqlalchemy import JSON, Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -47,6 +47,12 @@ class BacktestResult(Base):
     mdd_peak_date: Mapped[str | None] = mapped_column(String, nullable=True)
     mdd_trough_date: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Monthly mean IC: [{"month": "YYYY-MM", "ic": float}]
+    ic_series: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+
+    # alphalab.engine.version.ENGINE_VERSION that produced this row (NULL = v1)
+    engine_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Relationship
     factor: Mapped["Factor"] = relationship("Factor", back_populates="backtest_result")
 
@@ -74,6 +80,9 @@ class RobustnessResult(Base):
     stressed_equity_curve: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSON, nullable=True
     )
+
+    # alphalab.engine.version.ENGINE_VERSION that produced this row (NULL = v1)
+    engine_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationship
     factor: Mapped["Factor"] = relationship(

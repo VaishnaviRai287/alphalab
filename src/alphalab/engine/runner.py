@@ -16,6 +16,7 @@ from alphalab.dsl import compile_factor
 from alphalab.engine.evaluator import FactorEvaluator
 from alphalab.engine.metrics import PerformanceCalculator
 from alphalab.engine.portfolio import PortfolioConstructor
+from alphalab.engine.version import ENGINE_VERSION
 
 
 class ExperimentRunner:
@@ -31,17 +32,20 @@ class ExperimentRunner:
         storage = DuckDBStorage()
         start_date, end_date = storage.get_available_date_range()
 
-        # 3. Resolve universe constituents active at the end_date
+        # 3. Resolve every constituent interval in the window (point-in-time)
         universe = NIFTY50Universe()
-        constituents = universe.get_constituents(end_date)
-        tickers = [c.ticker for c in constituents]
+        constituents = universe.get_constituents_between(start_date, end_date)
+        tickers = sorted({c.ticker for c in constituents})
         if not tickers:
-            raise DataError(f"No constituents found active on date {end_date}")
+            raise DataError(
+                f"No constituents found between {start_date} and {end_date}"
+            )
 
-        # 4. Evaluate factor to generate daily raw signal series
+        # 4. Evaluate factor to generate daily raw signal series, keeping each
+        # ticker only on the days it was an index member
         evaluator = FactorEvaluator(storage)
         signals_df = evaluator.evaluate(
-            factor_func, tickers, start_date, end_date, factor.formula
+            factor_func, tickers, start_date, end_date, membership=constituents
         )
 
         # 5. Translate raw signals into portfolio target weights
@@ -55,6 +59,9 @@ class ExperimentRunner:
         portfolio_returns = PerformanceCalculator.compute_returns(weights_df, prices_df)
         metrics = PerformanceCalculator.calculate_metrics(
             portfolio_returns, signals_df, prices_df
+        )
+        ic_series = PerformanceCalculator.monthly_ic_series(
+            PerformanceCalculator.daily_ic_series(signals_df, prices_df)
         )
 
         # Compute equity curve for the API
@@ -138,6 +145,8 @@ class ExperimentRunner:
                 daily_std=daily_std,
                 mdd_peak_date=mdd_peak_date,
                 mdd_trough_date=mdd_trough_date,
+                ic_series=ic_series,
+                engine_version=ENGINE_VERSION,
             )
             session.add(b_res)
         else:
@@ -152,5 +161,7 @@ class ExperimentRunner:
             b_res.daily_std = daily_std
             b_res.mdd_peak_date = mdd_peak_date
             b_res.mdd_trough_date = mdd_trough_date
+            b_res.ic_series = ic_series
+            b_res.engine_version = ENGINE_VERSION
 
         await session.flush()

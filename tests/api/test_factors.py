@@ -12,11 +12,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
+from alphalab.api.auth.jwt import get_current_user
 from alphalab.api.database.connection import get_db_session
 from alphalab.api.main import app
 from alphalab.api.models.experiment import Experiment
 from alphalab.api.models.factor import Factor
 from alphalab.api.models.results import BacktestResult, RobustnessResult
+from alphalab.api.models.user import User
 
 
 @pytest.fixture
@@ -33,6 +35,10 @@ def client(mock_db: AsyncMock) -> Generator[TestClient, None, None]:
         yield mock_db
 
     app.dependency_overrides[get_db_session] = _override_db
+    # Factor detail routes require a logged-in user
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=uuid.uuid4(), email="viewer@example.com", name="Viewer", hashed_password="x"
+    )
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -123,3 +129,33 @@ def test_get_factor_robustness(client: TestClient, mock_db: AsyncMock, sample_fa
     data = response.json()
     assert data["overall_score"] == 0.8
     assert len(data["grid"]) == 1
+
+
+@pytest.mark.parametrize("suffix", ["", "/backtest", "/robustness"])
+def test_factor_detail_routes_require_auth(mock_db: AsyncMock, suffix: str) -> None:
+    """Detail routes return 401 without a token; the leaderboard stays public."""
+    def _override_db() -> Generator[AsyncMock, None, None]:
+        yield mock_db
+
+    app.dependency_overrides[get_db_session] = _override_db
+    try:
+        with TestClient(app) as c:
+            assert c.get(f"/factors/{uuid.uuid4()}{suffix}").status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_leaderboard_is_public(mock_db: AsyncMock) -> None:
+    def _override_db() -> Generator[AsyncMock, None, None]:
+        yield mock_db
+
+    mock_db.scalar.return_value = 0
+    mock_result = MagicMock()
+    mock_result.scalars().all.return_value = []
+    mock_db.execute.return_value = mock_result
+    app.dependency_overrides[get_db_session] = _override_db
+    try:
+        with TestClient(app) as c:
+            assert c.get("/factors/leaderboard").status_code == 200
+    finally:
+        app.dependency_overrides.clear()

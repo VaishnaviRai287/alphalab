@@ -1,23 +1,38 @@
 import { getAuthToken } from "@/lib/actions";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import type { ExperimentOut, FactorSummary } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-async function getLeaderboard() {
+// /experiments is scoped to the current user (unlike the global /factors/leaderboard)
+async function getMyFactors(): Promise<FactorSummary[]> {
   const token = await getAuthToken();
   if (!token) redirect("/login");
 
-  const res = await fetch(`${API_URL}/factors/leaderboard?sort=overall_score&order=desc`, {
+  const res = await fetch(`${API_URL}/experiments`, {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",
   });
 
   if (!res.ok) {
     if (res.status === 401) redirect("/login");
-    throw new Error("Failed to fetch leaderboard");
+    throw new Error("Failed to fetch experiments");
   }
-  return res.json();
+  const experiments: ExperimentOut[] = await res.json();
+
+  // Flatten experiments into the same row shape the leaderboard returned
+  return experiments.flatMap((exp) =>
+    exp.factors.map((f) => ({
+      id: f.id,
+      name: f.name,
+      formula: f.formula,
+      created_at: f.created_at,
+      sharpe: f.backtest_result?.sharpe ?? null,
+      ic: f.backtest_result?.ic ?? null,
+      overall_score: f.robustness_result?.overall_score ?? null,
+    }))
+  );
 }
 
 
@@ -34,13 +49,12 @@ function formatDateNeutral(dateStr: string): string {
 }
 
 export default async function HistoryPage() {
-  const data = await getLeaderboard();
-  const factors = data.items || [];
+  const factors = await getMyFactors();
 
   const discoveriesFeed = (() => {
     const events: { id: string; text: string; time: string; status: string }[] = [];
     const sorted = [...factors].sort(
-      (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
     for (const f of sorted.slice(0, 4)) {
@@ -110,7 +124,7 @@ export default async function HistoryPage() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "14px", maxWidth: "600px" }}>
-            {discoveriesFeed.map((ev: any) => (
+            {discoveriesFeed.map((ev) => (
               <div key={ev.id} style={{
                 display: "flex",
                 alignItems: "center",
@@ -178,7 +192,7 @@ export default async function HistoryPage() {
             </Link>
           </div>
         ) : (
-          factors.map((factor: any) => (
+          factors.map((factor) => (
             <Link href={`/history/${factor.id}`} key={factor.id} style={{ textDecoration: "none", color: "inherit" }}>
               <div className="history-row" style={{
                 display: "grid",
@@ -224,10 +238,10 @@ export default async function HistoryPage() {
                       width: "6px",
                       height: "6px",
                       borderRadius: "50%",
-                      background: factor.overall_score >= 0.8 ? "#22c55e" : "#f97316",
+                      background: factor.overall_score === null ? "#8a9085" : factor.overall_score >= 0.8 ? "#22c55e" : "#f97316",
                     }} />
                     <span style={{ fontSize: "12px", fontWeight: 500, color: "#1a1c18" }}>
-                      {factor.overall_score >= 0.8 ? "Robust" : "Overfit"}
+                      {factor.overall_score === null ? "Pending" : factor.overall_score >= 0.8 ? "Robust" : "Overfit"}
                     </span>
                   </div>
                   <div style={{ fontSize: "11px", color: "#8a9085", marginTop: "2px" }}>

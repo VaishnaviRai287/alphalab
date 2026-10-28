@@ -168,3 +168,25 @@ def test_submit_experiment_success(
         # Verify background tasks were enqueued
         mock_backtest.delay.assert_called_once()
         mock_robustness.delay.assert_called_once()
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("formula", ["delay(close, 0-1)", "vwap / close", "Momentum(", "Lag(close, -1)"])
+def test_submit_experiment_rejects_invalid_formula(
+    client: TestClient, mock_db: AsyncMock, formula: str
+) -> None:
+    """Invalid or look-ahead formulas are rejected with 422 before anything is saved."""
+    from alphalab.api.auth.jwt import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: User(
+        id=uuid.uuid4(), email="r@example.com", name="R", hashed_password="x"
+    )
+    with patch("alphalab.api.routers.experiments.run_backtest_task") as mock_bt:
+        response = client.post(
+            "/experiments",
+            json={"name": "x", "factors": [{"name": "f", "formula": formula}]},
+        )
+    assert response.status_code == 422
+    assert "Invalid formula" in response.json()["detail"]
+    mock_db.add.assert_not_called()
+    mock_bt.delay.assert_not_called()

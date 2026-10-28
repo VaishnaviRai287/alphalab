@@ -14,19 +14,21 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-
-interface Factor {
-  id: string;
-  name: string;
-  formula: string;
-  created_at: string;
-  sharpe: number | null;
-  ic: number | null;
-  overall_score: number | null;
-}
+import type { FactorSummary } from "@/lib/types";
 
 interface ClientDashboardProps {
-  factors: Factor[];
+  factors: FactorSummary[];
+}
+
+/** One point on the landscape chart (x = robustness %, y = Sharpe) */
+interface ScatterPoint {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  ic: number;
+  status: string;
+  fill: string;
 }
 
 const ROBUSTNESS_THRESHOLD = 0.8;
@@ -39,14 +41,39 @@ function computeResearchGrade(passRate: number, avgSharpe: number, totalCount: n
   return "Development (C)";
 }
 
-function formatDateNeutral(dateStr: string): string {
-  const d = new Date(dateStr);
-  const day = d.getUTCDate();
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const month = months[d.getUTCMonth()];
-  const hours = String(d.getUTCHours()).padStart(2, "0");
-  const minutes = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${day} ${month} at ${hours}:${minutes}`;
+// Custom tooltip for the factor landscape. Declared at module level so React
+// keeps the same component identity across renders.
+function CustomScatterTooltip({ active, payload }: { active?: boolean; payload?: { payload: ScatterPoint }[] }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div style={{
+        background: "#1a1c18",
+        color: "#fff",
+        padding: "10px 14px",
+        border: "1px solid #1a1c18",
+        fontSize: "11px",
+        fontFamily: "var(--font-mono)",
+        lineHeight: 1.5,
+      }}>
+        <div style={{ fontWeight: 600, borderBottom: "1px solid #3a3d37", paddingBottom: "4px", marginBottom: "6px" }}>
+          {data.name}
+        </div>
+        <div>Sharpe: <span style={{ float: "right", paddingLeft: "16px" }}>{data.y.toFixed(2)}</span></div>
+        <div>Robustness: <span style={{ float: "right", paddingLeft: "16px" }}>{data.x.toFixed(0)}%</span></div>
+        <div>IC: <span style={{ float: "right", paddingLeft: "16px" }}>{data.ic.toFixed(3)}</span></div>
+        <div style={{
+          marginTop: "4px",
+          borderTop: "1px dashed #3a3d37",
+          paddingTop: "4px",
+          color: data.status === "Passed" ? "#10b981" : data.status === "Needs Review" ? "#fbbf24" : data.status === "Running" ? "#9ca3af" : "#ef4444"
+        }}>
+          Status: <span style={{ float: "right", fontWeight: 600 }}>{data.status}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
 
 export default function ClientDashboard({ factors }: ClientDashboardProps) {
@@ -140,39 +167,6 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
   }, [factors]);
 
 
-  // Custom tool-tip component for ScatterPlot
-  const CustomScatterTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div style={{
-          background: "#1a1c18",
-          color: "#fff",
-          padding: "10px 14px",
-          border: "1px solid #1a1c18",
-          fontSize: "11px",
-          fontFamily: "var(--font-mono)",
-          lineHeight: 1.5,
-        }}>
-          <div style={{ fontWeight: 600, borderBottom: "1px solid #3a3d37", paddingBottom: "4px", marginBottom: "6px" }}>
-            {data.name}
-          </div>
-          <div>Sharpe: <span style={{ float: "right", paddingLeft: "16px" }}>{data.y.toFixed(2)}</span></div>
-          <div>Robustness: <span style={{ float: "right", paddingLeft: "16px" }}>{data.x.toFixed(0)}%</span></div>
-          <div>IC: <span style={{ float: "right", paddingLeft: "16px" }}>{data.ic.toFixed(3)}</span></div>
-          <div style={{
-            marginTop: "4px",
-            borderTop: "1px dashed #3a3d37",
-            paddingTop: "4px",
-            color: data.status === "Passed" ? "#10b981" : data.status === "Needs Review" ? "#fbbf24" : data.status === "Running" ? "#9ca3af" : "#ef4444"
-          }}>
-            Status: <span style={{ float: "right", fontWeight: 600 }}>{data.status}</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
 
 
   return (
@@ -555,7 +549,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
                   />
                   <ZAxis type="number" range={[180, 180]} />
                   <Tooltip content={<CustomScatterTooltip />} cursor={{ strokeDasharray: "3 3" }} />
-                  <Scatter data={scatterData} onClick={(node: any) => router.push(`/history/${node.id}`)}>
+                  <Scatter data={scatterData} onClick={(node: { payload?: ScatterPoint }) => node.payload && router.push(`/history/${node.payload.id}`)}>
                     {scatterData.map((entry, index) => {
                       const isHovered = hoveredPointId === entry.id;
                       const opacity = hoveredPointId ? (isHovered ? 1.0 : 0.25) : 0.85;
@@ -626,11 +620,11 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               1. Factor
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              A "factor" is a measurable characteristic of a stock that helps explain its return and risk over time. Think of it as a specific "rule" or "trait" you look for. For example, a <strong>Value</strong> factor targets stocks that are cheap relative to their fundamentals, while a <strong>Momentum</strong> factor targets stocks that have recently gone up in price.
+              A &quot;factor&quot; is a measurable characteristic of a stock that helps explain its return and risk over time. Think of it as a specific &quot;rule&quot; or &quot;trait&quot; you look for. For example, a <strong>Value</strong> factor targets stocks that are cheap relative to their fundamentals, while a <strong>Momentum</strong> factor targets stocks that have recently gone up in price.
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
-              If your rule is "buy stocks whose price dropped the most yesterday," the mathematical expression (e.g., <span style={{color: "var(--green)"}}>ts_rank(returns, 1)</span>) represents that Factor.
+              If your rule is &quot;buy stocks whose price dropped the most yesterday,&quot; the mathematical expression (e.g., <span style={{color: "var(--green)"}}>ts_rank(returns, 1)</span>) represents that Factor.
             </div>
           </div>
 
@@ -640,7 +634,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               2. NIFTY 50 (Universe)
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              The "Universe" is the set of stocks your factor is allowed to trade. AlphaLab currently uses the <strong>NIFTY 50</strong> universe, which represents the 50 largest and most liquid companies listed on the National Stock Exchange of India. Testing on a well-known universe ensures results aren't distorted by illiquid, hard-to-trade penny stocks.
+              The &quot;Universe&quot; is the set of stocks your factor is allowed to trade. AlphaLab currently uses the <strong>NIFTY 50</strong> universe, which represents the 50 largest and most liquid companies listed on the National Stock Exchange of India. Testing on a well-known universe ensures results aren&apos;t distorted by illiquid, hard-to-trade penny stocks.
             </p>
           </div>
 
@@ -650,7 +644,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               3. Sharpe Ratio
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              The Sharpe Ratio measures "risk-adjusted return." It tells you how much excess return you are getting for the extra volatility you endure. A high Sharpe ratio means the strategy is making steady, smooth profits without wild swings.
+              The Sharpe Ratio measures &quot;risk-adjusted return.&quot; It tells you how much excess return you are getting for the extra volatility you endure. A high Sharpe ratio means the strategy is making steady, smooth profits without wild swings.
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
@@ -666,7 +660,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               4. Volatility
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              Volatility is the statistical measure of the dispersion of returns. Simply put, it shows how wildly a stock's (or a portfolio's) price swings around its average. High volatility means high risk.
+              Volatility is the statistical measure of the dispersion of returns. Simply put, it shows how wildly a stock&apos;s (or a portfolio&apos;s) price swings around its average. High volatility means high risk.
             </p>
           </div>
 
@@ -676,7 +670,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               5. Drawdown (Max Drawdown)
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              A drawdown is the percentage drop from the highest peak of your portfolio's value to its lowest trough before a new peak is achieved. <strong>Max Drawdown</strong> is the largest of these drops over the entire backtest history.
+              A drawdown is the percentage drop from the highest peak of your portfolio&apos;s value to its lowest trough before a new peak is achieved. <strong>Max Drawdown</strong> is the largest of these drops over the entire backtest history.
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
@@ -690,11 +684,11 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               6. Information Coefficient (IC)
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              IC measures the predictive power of your factor. It is the correlation between the score your factor gives a stock today, and the stock's actual return tomorrow. 
+              IC measures the predictive power of your factor. It is the correlation between the score your factor gives a stock today, and the stock&apos;s actual return tomorrow. 
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
-              An IC of 1.0 means your factor predicted tomorrow's stock rankings perfectly.<br/>
+              An IC of 1.0 means your factor predicted tomorrow&apos;s stock rankings perfectly.<br/>
               An IC of 0.0 means your factor is completely random.<br/>
               In real-world quantitative finance, a consistent IC of just 0.05 (5%) is highly profitable.
             </div>
@@ -706,7 +700,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               7. Rank
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              Instead of looking at raw values, we often "rank" stocks cross-sectionally. If you rank stocks by their P/E ratio, the stock with the lowest ratio gets rank 1, the next gets rank 2, etc. This neutralizes extreme market outliers and focuses strictly on relative ordering.
+              Instead of looking at raw values, we often &quot;rank&quot; stocks cross-sectionally. If you rank stocks by their P/E ratio, the stock with the lowest ratio gets rank 1, the next gets rank 2, etc. This neutralizes extreme market outliers and focuses strictly on relative ordering.
             </p>
           </div>
 
@@ -726,7 +720,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               9. Stress Testing & Perturbation
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "16px", lineHeight: 1.6 }}>
-              Once a factor performs well historically, we "stress test" it to see if it was just lucky. <strong>Perturbation</strong> involves artificially changing the historical market data slightly (e.g., injecting random "Gaussian noise" or "dropping out" specific days). 
+              Once a factor performs well historically, we &quot;stress test&quot; it to see if it was just lucky. <strong>Perturbation</strong> involves artificially changing the historical market data slightly (e.g., injecting random &quot;Gaussian noise&quot; or &quot;dropping out&quot; specific days). 
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
@@ -740,7 +734,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               10. Robustness
             </h3>
             <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "0", lineHeight: 1.6 }}>
-              A factor is "Robust" if its Sharpe Ratio survives the stress tests and perturbations. An "Overfit" factor looks great in a normal backtest but degrades rapidly when faced with noise, meaning it merely memorized the past rather than discovering a true market inefficiency.
+              A factor is &quot;Robust&quot; if its Sharpe Ratio survives the stress tests and perturbations. An &quot;Overfit&quot; factor looks great in a normal backtest but degrades rapidly when faced with noise, meaning it merely memorized the past rather than discovering a true market inefficiency.
             </p>
           </div>
 
@@ -754,7 +748,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
-              Buying a stock because you know tomorrow's close price is higher. Always use the <span style={{color: "var(--green)"}}>Lag(x, d)</span> function to ensure your signals only use strictly historical data.
+              Buying a stock because you know tomorrow&apos;s close price is higher. Always use the <span style={{color: "var(--green)"}}>Lag(x, d)</span> function to ensure your signals only use strictly historical data.
             </div>
           </div>
 
@@ -778,7 +772,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
             </p>
             <div style={{ background: "rgba(26,28,24,0.03)", border: "1px solid var(--border-soft)", padding: "16px", fontSize: "12px", fontFamily: "var(--font-mono)" }}>
               <span style={{ color: "var(--ink-faint)", fontWeight: 600 }}>Example:</span><br/>
-              Finding a rule that says "Buy every 3rd Tuesday if the temperature in New York is 60 degrees." It might perfectly match a past bull run by coincidence, but it has zero predictive power.
+              Finding a rule that says &quot;Buy every 3rd Tuesday if the temperature in New York is 60 degrees.&quot; It might perfectly match a past bull run by coincidence, but it has zero predictive power.
             </div>
           </div>
 
@@ -901,7 +895,7 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               </div>
               <div style={{ padding: "24px" }}>
                 <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "20px", lineHeight: 1.6 }}>
-                  The "Sharpe Retention Across Perturbation Levels" bar chart is generated by running 6 distinct stress simulations: injecting Gaussian noise (0.5%, 1.0%, 2.0%) into the price matrix, and randomly dropping out market data (5%, 10%, 20%). The Y-axis shows "Sharpe Retention."
+                  The &quot;Sharpe Retention Across Perturbation Levels&quot; bar chart is generated by running 6 distinct stress simulations: injecting Gaussian noise (0.5%, 1.0%, 2.0%) into the price matrix, and randomly dropping out market data (5%, 10%, 20%). The Y-axis shows &quot;Sharpe Retention.&quot;
                 </p>
                 <div style={{ background: "#1a1c18", color: "#fff", padding: "20px", fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: 1.6, marginBottom: "20px", overflowX: "auto" }}>
                   <div style={{ color: "#8a9085", marginBottom: "8px" }}># Python Implementation:</div>
@@ -924,16 +918,16 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               </div>
               <div style={{ padding: "24px" }}>
                 <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "20px", lineHeight: 1.6 }}>
-                  The "Robustness Score" (X-axis on the main landscape graph) is the average Sharpe Retention across all 6 stress grid tests. AlphaLab assigns a strict classification based on this mathematical threshold.
+                  The &quot;Robustness Score&quot; (X-axis on the main landscape graph) is the average Sharpe Retention across all 6 stress grid tests. AlphaLab assigns a strict classification based on this mathematical threshold.
                 </p>
                 <div style={{ background: "#1a1c18", color: "#fff", padding: "20px", fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: 1.6, marginBottom: "20px", overflowX: "auto" }}>
                   <div style={{ color: "#8a9085", marginBottom: "8px" }}># Classification Logic:</div>
                   <div style={{ color: "#fbbf24" }}>if</div> overall_score &gt;= 0.80:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#10b981"}}>"Robust" (Green)</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#10b981"}}>&quot;Robust&quot; (Green)</span><br/>
                   <div style={{ color: "#fbbf24" }}>elif</div> overall_score &gt; 0.0:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#fbbf24"}}>"Needs Review" (Amber)</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#fbbf24"}}>&quot;Needs Review&quot; (Amber)</span><br/>
                   <div style={{ color: "#fbbf24" }}>else</div>:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#ef4444"}}>"Overfit" (Red)</span>
+                  &nbsp;&nbsp;&nbsp;&nbsp;status = <span style={{color: "#ef4444"}}>&quot;Overfit&quot; (Red)</span>
                 </div>
               </div>
             </div>
@@ -986,18 +980,18 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               </div>
               <div style={{ padding: "24px" }}>
                 <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "20px", lineHeight: 1.6 }}>
-                  The "Research Grade" acts as a live, platform-wide health monitor evaluating the collective progress of all users on the application. It dynamically assigns a letter grade based on the overall robustness pass rate and the average Sharpe ratio across all completed experiments.
+                  The &quot;Research Grade&quot; acts as a live, platform-wide health monitor evaluating the collective progress of all users on the application. It dynamically assigns a letter grade based on the overall robustness pass rate and the average Sharpe ratio across all completed experiments.
                 </p>
                 <div style={{ background: "#1a1c18", color: "#fff", padding: "20px", fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: 1.6, marginBottom: "20px", overflowX: "auto" }}>
                   <div style={{ color: "#8a9085", marginBottom: "8px" }}># Classification Logic:</div>
                   <div style={{ color: "#fbbf24" }}>if</div> total_experiments == 0:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#8a9085"}}>"Inception (D)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#8a9085"}}>&quot;Inception (D)&quot;</span><br/>
                   <div style={{ color: "#fbbf24" }}>elif</div> pass_rate &gt;= 60 <div style={{ color: "#fbbf24", display: "inline" }}>and</div> avg_sharpe &gt;= 1.0:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#10b981"}}>"Institutional (A)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#10b981"}}>&quot;Institutional (A)&quot;</span><br/>
                   <div style={{ color: "#fbbf24" }}>elif</div> pass_rate &gt;= 40 <div style={{ color: "#fbbf24", display: "inline" }}>and</div> avg_sharpe &gt;= 0.5:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#3b82f6"}}>"Professional (B)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#3b82f6"}}>&quot;Professional (B)&quot;</span><br/>
                   <div style={{ color: "#fbbf24" }}>else</div>:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#fbbf24"}}>"Development (C)"</span>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#fbbf24"}}>&quot;Development (C)&quot;</span>
                 </div>
               </div>
             </div>
@@ -1015,18 +1009,18 @@ export default function ClientDashboard({ factors }: ClientDashboardProps) {
               </div>
               <div style={{ padding: "24px" }}>
                 <p style={{ fontSize: "13px", color: "var(--ink-light)", marginBottom: "20px", lineHeight: 1.6 }}>
-                  While the Research Grade measures the platform globally, each individual factor is also assigned a specific "Strategy Grade" (A, B, C, D) on its history detail page. This acts as a final gatekeeper, grading the individual algorithm based on its specific Robustness Score and Sharpe Ratio.
+                  While the Research Grade measures the platform globally, each individual factor is also assigned a specific &quot;Strategy Grade&quot; (A, B, C, D) on its history detail page. This acts as a final gatekeeper, grading the individual algorithm based on its specific Robustness Score and Sharpe Ratio.
                 </p>
                 <div style={{ background: "#1a1c18", color: "#fff", padding: "20px", fontFamily: "var(--font-mono)", fontSize: "12px", lineHeight: 1.6, marginBottom: "20px", overflowX: "auto" }}>
                   <div style={{ color: "#8a9085", marginBottom: "8px" }}># Classification Logic:</div>
                   <span style={{ color: "#fbbf24" }}>if</span> overall_score {">="} 0.80 <span style={{ color: "#fbbf24" }}>and</span> sharpe {">="} 1.0:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#10b981"}}>"Institutional (A)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#10b981"}}>&quot;Institutional (A)&quot;</span><br/>
                   <span style={{ color: "#fbbf24" }}>elif</span> overall_score {">="} 0.80 <span style={{ color: "#fbbf24" }}>and</span> sharpe {">="} 0.5:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#3b82f6"}}>"Professional (B)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#3b82f6"}}>&quot;Professional (B)&quot;</span><br/>
                   <span style={{ color: "#fbbf24" }}>elif</span> overall_score {">="} 0.80:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#fbbf24"}}>"Development (C)"</span><br/>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#fbbf24"}}>&quot;Development (C)&quot;</span><br/>
                   <span style={{ color: "#fbbf24" }}>else</span>:<br/>
-                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#b91c1c"}}>"Rejected (D)"</span>
+                  &nbsp;&nbsp;&nbsp;&nbsp;grade = <span style={{color: "#b91c1c"}}>&quot;Rejected (D)&quot;</span>
                 </div>
               </div>
             </div>

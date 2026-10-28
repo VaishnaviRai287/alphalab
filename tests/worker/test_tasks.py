@@ -68,7 +68,7 @@ def test_run_backtest_task_success(
     # Mock Evaluator, Universe, Portfolio, and PerformanceCalculator outputs to return mock values
     mock_universe = MagicMock()
     mock_universe_class.return_value = mock_universe
-    mock_universe.get_constituents.return_value = [MagicMock(ticker="AAPL")]
+    mock_universe.get_constituents_between.return_value = [MagicMock(ticker="AAPL")]
 
     mock_evaluator = MagicMock()
     mock_evaluator_class.return_value = mock_evaluator
@@ -139,7 +139,7 @@ def test_run_robustness_task_success(
 
     mock_universe = MagicMock()
     mock_universe_class.return_value = mock_universe
-    mock_universe.get_constituents.return_value = [MagicMock(ticker="AAPL")]
+    mock_universe.get_constituents_between.return_value = [MagicMock(ticker="AAPL")]
 
     # Mock RobustnessEvaluator output
     mock_evaluator = MagicMock()

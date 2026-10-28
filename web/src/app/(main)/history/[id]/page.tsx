@@ -31,7 +31,8 @@ export default async function FactorDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const { detail, backtest, robustness } = await getFactorData(id);
 
-  const isPending = !backtest || !robustness || robustness.overall_score == null;
+  const isFailed = detail.status === "FAILED";
+  const isPending = !isFailed && (!backtest || !robustness || robustness.overall_score == null);
 
   return (
     <>
@@ -51,7 +52,27 @@ export default async function FactorDetailPage({ params }: { params: Promise<{ i
         </Link>
       </div>
 
-      {isPending ? (
+      {isFailed ? (
+        <div style={{
+          border: "1px solid #b91c1c",
+          background: "#fef2f2",
+          padding: "48px 24px",
+          textAlign: "center",
+          marginBottom: "32px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "12px"
+        }}>
+          <div className="al-tag" style={{ color: "#b91c1c" }}>ANALYSIS FAILED</div>
+          <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "20px", fontWeight: 500, margin: 0 }}>
+            This factor could not be evaluated
+          </h2>
+          <p style={{ fontSize: "12px", color: "var(--ink-light)", maxWidth: "440px", lineHeight: 1.6, margin: 0 }}>
+            The backtest or robustness run raised an error, so no results were saved. Check the formula and submit it again as a new experiment.
+          </p>
+        </div>
+      ) : isPending ? (
         <div style={{
           border: "1px solid #1a1c18",
           background: "#fff",

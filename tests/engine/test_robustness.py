@@ -155,3 +155,40 @@ def test_robustness_evaluator_unprofitable_baseline(
     assert results["missing_data_score"] == 0.0
     assert results["overall_score"] == 0.0
     assert results["failure_reasons"]["dominant_failure"] == "not_profitable"
+
+
+def test_robustness_iterations_use_distinct_seeds(sample_price_df):
+    """Each iteration must see different perturbed data, not three identical runs."""
+    seen: list[pd.DataFrame] = []
+
+    base_storage = MagicMock()
+    base_storage.read_ohlcv.return_value = MarketDataset(
+        data=sample_price_df, start_date=date(2023, 1, 1), end_date=date(2023, 1, 20)
+    )
+
+    evaluator = RobustnessEvaluator(base_storage, num_iterations=3)
+    original = evaluator._run_perturbed_backtest
+
+    def spy(factor_func, tickers, start, end, perturb_func, membership=None):
+        seen.append(perturb_func(sample_price_df))
+        return original(factor_func, tickers, start, end, perturb_func, membership)
+
+    evaluator._run_perturbed_backtest = spy  # type: ignore[method-assign]
+    evaluator.run_robustness(
+        "Momentum(2)", ["AAPL", "MSFT"], date(2023, 1, 1), date(2023, 1, 20),
+        baseline_sharpe=1.0,
+    )
+
+    # 6 levels x 3 iterations; within each level the 3 frames must differ
+    assert len(seen) == 18
+    for level in range(6):
+        a, b, c = seen[level * 3 : level * 3 + 3]
+        assert not a.equals(b)
+        assert not b.equals(c)
+
+
+def test_perturbation_is_reproducible_for_same_seed(sample_price_df):
+    """Signals and returns read the perturbed storage separately; same seed must match."""
+    assert perturb_gaussian(sample_price_df, 0.01, seed=7).equals(
+        perturb_gaussian(sample_price_df, 0.01, seed=7)
+    )

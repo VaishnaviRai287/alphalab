@@ -77,11 +77,43 @@ def test_evaluator_drops_nans(mock_storage):
     """Test evaluator drops NaN signals (e.g. from shift/rolling)."""
     evaluator = FactorEvaluator(mock_storage)
 
-    # Factor: pct_change creates NaN on the first row
+    # Factor: pct_change creates NaN on each ticker's first row. Factor functions
+    # receive the whole panel, so time-series ops must group by ticker.
     def mock_factor(df: pd.DataFrame) -> pd.Series:
-        return df["Price"].pct_change()
+        return df.groupby("ticker")["Price"].pct_change()
 
     result = evaluator.evaluate(mock_factor, ["AAPL", "MSFT"], date(2023, 1, 1), date(2023, 1, 2))
 
     assert len(result) == 2  # 1 row per ticker instead of 2 (first row dropped)
     assert pd.isna(result["signal"]).sum() == 0
+
+
+def test_evaluator_membership_filter(mock_storage):
+    """Signals are kept only on dates the ticker was an index member."""
+    from alphalab.common.types import UniverseEntry
+
+    evaluator = FactorEvaluator(mock_storage)
+    membership = [
+        UniverseEntry("AAPL", "NIFTY50", date(2023, 1, 1), None),
+        # MSFT leaves the index on 2023-01-02 (exclusive end)
+        UniverseEntry("MSFT", "NIFTY50", date(2023, 1, 1), date(2023, 1, 2)),
+    ]
+
+    result = evaluator.evaluate(
+        lambda df: df["Price"], ["AAPL", "MSFT"], date(2023, 1, 1), date(2023, 1, 2),
+        membership=membership,
+    )
+
+    assert len(result[result["ticker"] == "AAPL"]) == 2
+    msft = result[result["ticker"] == "MSFT"]
+    assert len(msft) == 1
+    assert pd.Timestamp(msft["date"].iloc[0]) == pd.Timestamp(2023, 1, 1)
+
+
+def test_evaluator_drops_infinite_signals(mock_storage):
+    """Division by zero must not leave inf in the signal column."""
+    evaluator = FactorEvaluator(mock_storage)
+    result = evaluator.evaluate(
+        lambda df: df["Price"] / 0, ["AAPL", "MSFT"], date(2023, 1, 1), date(2023, 1, 2)
+    )
+    assert result.empty
